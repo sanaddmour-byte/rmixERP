@@ -24,6 +24,7 @@ function toApi(row: ChargeTypeRow): ChargeType {
     name: row.name,
     calculationMethod: row.calculationMethod,
     defaultAmountJod: row.defaultAmountFils === null ? null : filsToJodString(fils(row.defaultAmountFils)),
+    percentageBasisPoints: row.percentageBasisPoints,
     taxRateBasisPoints: row.taxRateBasisPoints,
     isActive: row.isActive,
     createdAt: row.createdAt.toISOString(),
@@ -91,6 +92,7 @@ chargeTypesRouter.post("/charge-types", requireAuth, requirePermission(MODULE, "
         name: input.name,
         calculationMethod: input.calculationMethod ?? "flat",
         defaultAmountFils: input.defaultAmountJod != null ? jodStringToFils(input.defaultAmountJod) : null,
+        percentageBasisPoints: input.percentageBasisPoints ?? null,
         taxRateBasisPoints: input.taxRateBasisPoints ?? 1600,
         isActive: input.isActive ?? true,
         createdBy: req.auth!.userId,
@@ -132,6 +134,7 @@ chargeTypesRouter.put("/charge-types/:id", requireAuth, requirePermission(MODULE
         ...(input.defaultAmountJod !== undefined && {
           defaultAmountFils: input.defaultAmountJod != null ? jodStringToFils(input.defaultAmountJod) : null,
         }),
+        ...(input.percentageBasisPoints !== undefined && { percentageBasisPoints: input.percentageBasisPoints }),
         ...(input.taxRateBasisPoints !== undefined && { taxRateBasisPoints: input.taxRateBasisPoints }),
         ...(input.isActive !== undefined && { isActive: input.isActive }),
         updatedAt: new Date(),
