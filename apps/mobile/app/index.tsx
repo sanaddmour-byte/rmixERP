@@ -20,7 +20,10 @@ const SALES_LINKS = [
   { module: "salesOrders", href: "/sales-orders" },
 ] as const;
 
-const PRODUCTION_LINKS = [{ module: "productionOrders", href: "/production-orders" }] as const;
+const PRODUCTION_LINKS = [
+  { module: "productionOrders", href: "/production-orders" },
+  { module: "qc", href: "/qc" },
+] as const;
 
 function MasterDataLink({
   module,
