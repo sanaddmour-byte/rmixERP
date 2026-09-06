@@ -24,7 +24,19 @@ const ROLE_NAMES = [
   "Operator",
 ] as const;
 
-const PERMISSION_MODULES = ["users", "roles", "branches"] as const;
+const PERMISSION_MODULES = [
+  "company",
+  "users",
+  "roles",
+  "branches",
+  "customers",
+  "projects",
+  "products",
+  "priceLists",
+  "chargeTypes",
+  "rawMaterials",
+  "vendors",
+] as const;
 const PERMISSION_ACTIONS = ["view", "create", "edit", "approve", "void"] as const;
 
 async function main() {

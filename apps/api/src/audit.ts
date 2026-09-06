@@ -14,6 +14,22 @@ export interface AuditEntry {
 }
 
 /**
+ * `before`/`after` are raw Drizzle rows, which can carry `bigint` columns
+ * (money in fils) — plain `JSON.stringify` (what the jsonb column driver
+ * uses) throws on those, so every bigint is stringified first. Dates are
+ * also normalized to ISO strings for a stable, human-readable audit trail.
+ */
+function toJsonSafe(value: unknown): unknown {
+  if (typeof value === "bigint") return value.toString();
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map(toJsonSafe);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, toJsonSafe(v)]));
+  }
+  return value;
+}
+
+/**
  * Writes one immutable audit_log row. CLAUDE.md Hard Rule: every mutation
  * touching money, stock, credit, or clearance must call this in the same
  * transaction as the mutation itself, so the audit row can never exist
@@ -27,8 +43,8 @@ export async function writeAudit(tx: Tx, entry: AuditEntry): Promise<void> {
     entityType: entry.entityType,
     entityId: entry.entityId,
     action: entry.action,
-    before: entry.before ?? null,
-    after: entry.after ?? null,
+    before: entry.before === undefined ? null : toJsonSafe(entry.before),
+    after: entry.after === undefined ? null : toJsonSafe(entry.after),
     reason: entry.reason ?? null,
   });
 }
