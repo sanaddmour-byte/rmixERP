@@ -36,6 +36,8 @@ const PERMISSION_MODULES = [
   "chargeTypes",
   "rawMaterials",
   "vendors",
+  "quotations",
+  "salesOrders",
 ] as const;
 const PERMISSION_ACTIONS = ["view", "create", "edit", "approve", "void"] as const;
 

@@ -18,7 +18,10 @@ export const chargeType = pgTable(
       .references(() => company.id),
     name: varchar("name", { length: 100 }).notNull(),
     calculationMethod: chargeCalculationMethod("calculation_method").notNull().default("flat"),
+    // Rate for "flat"/"per_unit" methods (JOD per occurrence/unit).
     defaultAmountFils: bigint("default_amount_fils", { mode: "bigint" }),
+    // Rate for the "percentage" method — percent of the order line's net amount, in basis points.
+    percentageBasisPoints: integer("percentage_basis_points"),
     taxRateBasisPoints: integer("tax_rate_basis_points").notNull().default(1600),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns(),
