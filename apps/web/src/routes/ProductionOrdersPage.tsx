@@ -6,11 +6,15 @@ import {
   useGetProductionOrder,
   useGetYieldVariance,
   useListBranches,
+  useListCubeTestSets,
+  useListFreshTests,
   useListMixDesigns,
   useListProducts,
   useListProductionOrders,
   useListRawMaterials,
   useRecordBatch,
+  useRecordCubeTestSet,
+  useRecordFreshTest,
   useRecordReturnedConcrete,
   type ProductionOrder,
 } from "@rmixerp/contract";
@@ -19,6 +23,136 @@ import { refetchOnSuccess } from "../lib/refetchOnSuccess";
 import { useModulePermissions } from "../lib/usePermissions";
 
 type ProductionOrderStatus = ProductionOrder["status"];
+
+function BatchQCPanel({ batchId, onCubeTestRecorded }: { batchId: string; onCubeTestRecorded: () => void }) {
+  const permissions = useModulePermissions("qc");
+  const freshTests = useListFreshTests(batchId);
+  const cubeTestSets = useListCubeTestSets(batchId);
+  const recordFreshTest = useRecordFreshTest(refetchOnSuccess(freshTests));
+  const recordCubeTestSet = useRecordCubeTestSet({
+    mutation: {
+      onSuccess: () => {
+        void cubeTestSets.refetch();
+        // A failing design-age result flags the batch (qcFlagged) on the parent
+        // production order — refetch it too so the badge shows without a manual reload.
+        onCubeTestRecorded();
+      },
+    },
+  });
+
+  const [slumpMm, setSlumpMm] = React.useState("");
+  const [concreteTemperatureC, setConcreteTemperatureC] = React.useState("");
+  const [airContentPercent, setAirContentPercent] = React.useState("");
+
+  const [ageDays, setAgeDays] = React.useState("28");
+  const [specimenStrengthsMpa, setSpecimenStrengthsMpa] = React.useState("");
+
+  const freshList = freshTests.data?.status === 200 ? freshTests.data.data : [];
+  const cubeList = cubeTestSets.data?.status === 200 ? cubeTestSets.data.data : [];
+
+  function submitFreshTest(e: React.FormEvent) {
+    e.preventDefault();
+    recordFreshTest.mutate({
+      batchId,
+      data: {
+        slumpMm,
+        ...(concreteTemperatureC && { concreteTemperatureC }),
+        ...(airContentPercent && { airContentPercent }),
+      },
+    });
+    setSlumpMm("");
+    setConcreteTemperatureC("");
+    setAirContentPercent("");
+  }
+
+  function submitCubeTestSet(e: React.FormEvent) {
+    e.preventDefault();
+    const strengths = specimenStrengthsMpa
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (strengths.length === 0) return;
+    recordCubeTestSet.mutate({ batchId, data: { ageDays: Number(ageDays), specimenStrengthsMpa: strengths } });
+    setSpecimenStrengthsMpa("");
+  }
+
+  return (
+    <div className="space-y-4 rounded-md border border-navy-200 bg-navy-50 p-3">
+      <div>
+        <p className="text-xs font-semibold text-navy-700">Fresh Tests</p>
+        {freshList.length === 0 && <p className="text-xs text-navy-400">None recorded.</p>}
+        {freshList.map((f) => (
+          <div key={f.id} className="text-xs text-navy-600">
+            Slump {f.slumpMm} mm
+            {f.concreteTemperatureC && ` · ${f.concreteTemperatureC}°C`}
+            {f.airContentPercent && ` · ${f.airContentPercent}% air`} ({new Date(f.testedAt).toLocaleString()})
+          </div>
+        ))}
+        {permissions.create && (
+          <form onSubmit={submitFreshTest} className="mt-2 flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1 text-xs">
+              Slump (mm)
+              <Input required value={slumpMm} onChange={(e) => setSlumpMm(e.target.value)} className="w-24" />
+            </label>
+            <label className="flex flex-col gap-1 text-xs">
+              Temp (°C)
+              <Input value={concreteTemperatureC} onChange={(e) => setConcreteTemperatureC(e.target.value)} className="w-20" />
+            </label>
+            <label className="flex flex-col gap-1 text-xs">
+              Air (%)
+              <Input value={airContentPercent} onChange={(e) => setAirContentPercent(e.target.value)} className="w-20" />
+            </label>
+            <Button type="submit" size="sm" disabled={recordFreshTest.isPending}>
+              Record
+            </Button>
+          </form>
+        )}
+      </div>
+
+      <div>
+        <p className="text-xs font-semibold text-navy-700">Cube Tests</p>
+        {cubeList.length === 0 && <p className="text-xs text-navy-400">None recorded.</p>}
+        {cubeList.map((c) => (
+          <div
+            key={c.id}
+            className={
+              c.pass === false ? "text-xs font-medium text-orange-700" : c.pass === true ? "text-xs text-green-700" : "text-xs text-navy-600"
+            }
+          >
+            Set #{c.setNumber} — {c.ageDays}d — avg {c.averageStrengthMpa} MPa —{" "}
+            {c.pass === null ? "pending (not at design age)" : c.pass ? "PASS" : "FAIL"}
+          </div>
+        ))}
+        {permissions.create && (
+          <form onSubmit={submitCubeTestSet} className="mt-2 flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1 text-xs">
+              Age (days)
+              <Input required value={ageDays} onChange={(e) => setAgeDays(e.target.value)} className="w-16" />
+            </label>
+            <label className="flex flex-col gap-1 text-xs">
+              Specimen strengths (MPa, comma-separated)
+              <Input
+                required
+                value={specimenStrengthsMpa}
+                onChange={(e) => setSpecimenStrengthsMpa(e.target.value)}
+                placeholder="31.0, 32.0, 33.0"
+                className="w-56"
+              />
+            </label>
+            <Button type="submit" size="sm" disabled={recordCubeTestSet.isPending}>
+              Record
+            </Button>
+          </form>
+        )}
+        {recordCubeTestSet.data?.status === 400 && (
+          <p className="mt-1 text-xs text-orange-700">
+            {recordCubeTestSet.data.data.error.message} — configure the product's characteristic strength first.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function ProductionOrderDetail({ orderId }: { orderId: string }) {
   const detail = useGetProductionOrder(orderId);
@@ -39,6 +173,7 @@ function ProductionOrderDetail({ orderId }: { orderId: string }) {
   const [overrideReason, setOverrideReason] = React.useState("");
   const [returnQuantityM3, setReturnQuantityM3] = React.useState("");
   const [returnReason, setReturnReason] = React.useState("");
+  const [expandedBatchId, setExpandedBatchId] = React.useState<string | null>(null);
 
   const o = detail.data?.status === 200 ? detail.data.data : undefined;
   const yv = yieldVariance.data?.status === 200 ? yieldVariance.data.data : undefined;
@@ -133,24 +268,51 @@ function ProductionOrderDetail({ orderId }: { orderId: string }) {
               <th className="py-2 pe-4 font-medium">Actual m³</th>
               <th className="py-2 pe-4 font-medium">Moisture bp</th>
               <th className="py-2 pe-4 font-medium">Consumptions</th>
+              <th className="py-2 pe-4 font-medium">QC</th>
             </tr>
           </thead>
           <tbody>
             {o.batches.map((batch) => (
-              <tr key={batch.id} className="border-b border-navy-100 align-top">
-                <td className="py-2 pe-4">{batch.batchNumber}</td>
-                <td className="py-2 pe-4">{batch.targetQuantityM3}</td>
-                <td className="py-2 pe-4">{batch.actualQuantityM3}</td>
-                <td className="py-2 pe-4">{batch.moistureAdjustmentBasisPoints}</td>
-                <td className="py-2 pe-4">
-                  {batch.consumptions.map((c) => (
-                    <div key={c.id} className={c.wentNegative ? "text-orange-600" : undefined}>
-                      {materialOptions.find((m) => m.id === c.rawMaterialId)?.name ?? c.rawMaterialId}: {c.quantityConsumed} @{" "}
-                      {c.unitCostJod} = {c.totalCostJod} JOD
-                    </div>
-                  ))}
-                </td>
-              </tr>
+              <React.Fragment key={batch.id}>
+                <tr className="border-b border-navy-100 align-top">
+                  <td className="py-2 pe-4">{batch.batchNumber}</td>
+                  <td className="py-2 pe-4">{batch.targetQuantityM3}</td>
+                  <td className="py-2 pe-4">{batch.actualQuantityM3}</td>
+                  <td className="py-2 pe-4">{batch.moistureAdjustmentBasisPoints}</td>
+                  <td className="py-2 pe-4">
+                    {batch.consumptions.map((c) => (
+                      <div key={c.id} className={c.wentNegative ? "text-orange-600" : undefined}>
+                        {materialOptions.find((m) => m.id === c.rawMaterialId)?.name ?? c.rawMaterialId}: {c.quantityConsumed} @{" "}
+                        {c.unitCostJod} = {c.totalCostJod} JOD
+                      </div>
+                    ))}
+                  </td>
+                  <td className="py-2 pe-4">
+                    {batch.qcFlagged && (
+                      <span
+                        className="mb-1 block rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800"
+                        title={batch.qcFlagReason ?? undefined}
+                      >
+                        QC failed
+                      </span>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setExpandedBatchId(expandedBatchId === batch.id ? null : batch.id)}
+                    >
+                      {expandedBatchId === batch.id ? "Hide QC" : "QC"}
+                    </Button>
+                  </td>
+                </tr>
+                {expandedBatchId === batch.id && (
+                  <tr>
+                    <td colSpan={6} className="pb-3">
+                      <BatchQCPanel batchId={batch.id} onCubeTestRecorded={() => void detail.refetch()} />
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
