@@ -15,7 +15,18 @@ const MASTER_DATA_LINKS = [
   { module: "priceLists", href: "/price-lists" },
 ] as const;
 
-function MasterDataLink({ module, href }: { module: (typeof MASTER_DATA_LINKS)[number]["module"]; href: string }) {
+const SALES_LINKS = [
+  { module: "quotations", href: "/quotations" },
+  { module: "salesOrders", href: "/sales-orders" },
+] as const;
+
+function MasterDataLink({
+  module,
+  href,
+}: {
+  module: (typeof MASTER_DATA_LINKS)[number]["module"] | (typeof SALES_LINKS)[number]["module"];
+  href: string;
+}) {
   const { t } = useLanguage();
   const router = useRouter();
   const permissions = useModulePermissions(module);
@@ -70,6 +81,12 @@ export default function HealthScreen() {
             <Pressable onPress={() => void handleSignOut()}>
               <Text style={{ color: colors.danger }}>{t.login.logout}</Text>
             </Pressable>
+          </View>
+
+          <View>
+            {SALES_LINKS.map((link) => (
+              <MasterDataLink key={link.module} module={link.module} href={link.href} />
+            ))}
           </View>
 
           <View>
