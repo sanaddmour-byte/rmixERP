@@ -19,6 +19,8 @@ export interface Translations {
     chargeTypes: string;
     rawMaterials: string;
     vendors: string;
+    quotations: string;
+    salesOrders: string;
   };
   login: {
     title: string;
@@ -74,6 +76,8 @@ export const translations: Record<Locale, Translations> = {
       chargeTypes: "Charge Types",
       rawMaterials: "Raw Materials",
       vendors: "Vendors",
+      quotations: "Quotations",
+      salesOrders: "Sales Orders",
     },
     login: {
       title: "Sign in",
@@ -127,6 +131,8 @@ export const translations: Record<Locale, Translations> = {
       chargeTypes: "أنواع الرسوم",
       rawMaterials: "المواد الخام",
       vendors: "الموردون",
+      quotations: "عروض الأسعار",
+      salesOrders: "أوامر البيع",
     },
     login: {
       title: "تسجيل الدخول",
