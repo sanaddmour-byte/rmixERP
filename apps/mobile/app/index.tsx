@@ -3,8 +3,30 @@ import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useGetHealth } from "@rmixerp/contract";
 import { useLanguage } from "../src/i18n/LanguageContext";
+import { useModulePermissions } from "../src/lib/usePermissions";
 import { useCurrentUser } from "../src/lib/useCurrentUser";
 import { clearSession, getAccessToken } from "../src/lib/session";
+import { colors } from "../src/theme";
+
+const MASTER_DATA_LINKS = [
+  { module: "customers", href: "/customers" },
+  { module: "projects", href: "/projects" },
+  { module: "products", href: "/products" },
+  { module: "priceLists", href: "/price-lists" },
+] as const;
+
+function MasterDataLink({ module, href }: { module: (typeof MASTER_DATA_LINKS)[number]["module"]; href: string }) {
+  const { t } = useLanguage();
+  const router = useRouter();
+  const permissions = useModulePermissions(module);
+  if (!permissions.view) return null;
+
+  return (
+    <Pressable onPress={() => router.push(href)} style={{ paddingVertical: 10 }}>
+      <Text style={{ color: colors.accent, fontSize: 15 }}>{t.nav[module]}</Text>
+    </Pressable>
+  );
+}
 
 export default function HealthScreen() {
   const { t, locale, setLocale } = useLanguage();
@@ -21,20 +43,20 @@ export default function HealthScreen() {
   return (
     <View style={{ flex: 1, padding: 24, gap: 16 }}>
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-        <Text style={{ fontSize: 20, fontWeight: "600" }}>{t.appName}</Text>
+        <Text style={{ fontSize: 20, fontWeight: "600", color: colors.navy }}>{t.appName}</Text>
         <Pressable onPress={() => setLocale(locale === "en" ? "ar" : "en")}>
-          <Text style={{ color: "#2563eb" }}>{t.languageToggle}</Text>
+          <Text style={{ color: colors.accent }}>{t.languageToggle}</Text>
         </Pressable>
       </View>
 
       <View style={{ gap: 4 }}>
-        <Text style={{ fontSize: 16, fontWeight: "600" }}>{t.health.title}</Text>
+        <Text style={{ fontSize: 16, fontWeight: "600", color: colors.navy }}>{t.health.title}</Text>
         {health.isLoading && <ActivityIndicator />}
-        {health.isError && <Text style={{ color: "#dc2626" }}>{t.health.error}</Text>}
+        {health.isError && <Text style={{ color: colors.danger }}>{t.health.error}</Text>}
         {health.data && (
           <>
-            <Text style={{ color: "#15803d" }}>{t.health.ok}</Text>
-            <Text style={{ color: "#64748b", fontSize: 12 }}>
+            <Text style={{ color: colors.success }}>{t.health.ok}</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12 }}>
               {t.health.lastChecked(health.data.data.time)}
             </Text>
           </>
@@ -42,15 +64,23 @@ export default function HealthScreen() {
       </View>
 
       {signedIn && currentUser?.status === 200 ? (
-        <View style={{ gap: 8 }}>
-          <Text style={{ color: "#64748b" }}>{t.login.loggedInAs(currentUser.data.displayName)}</Text>
-          <Pressable onPress={() => void handleSignOut()}>
-            <Text style={{ color: "#dc2626" }}>{t.login.logout}</Text>
-          </Pressable>
-        </View>
+        <>
+          <View style={{ gap: 8 }}>
+            <Text style={{ color: colors.textMuted }}>{t.login.loggedInAs(currentUser.data.displayName)}</Text>
+            <Pressable onPress={() => void handleSignOut()}>
+              <Text style={{ color: colors.danger }}>{t.login.logout}</Text>
+            </Pressable>
+          </View>
+
+          <View>
+            {MASTER_DATA_LINKS.map((link) => (
+              <MasterDataLink key={link.module} module={link.module} href={link.href} />
+            ))}
+          </View>
+        </>
       ) : (
         <Pressable onPress={() => router.push("/login")}>
-          <Text style={{ color: "#2563eb" }}>{t.nav.login}</Text>
+          <Text style={{ color: colors.accent }}>{t.nav.login}</Text>
         </Pressable>
       )}
     </View>
