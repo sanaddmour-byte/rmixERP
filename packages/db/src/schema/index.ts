@@ -17,3 +17,5 @@ export * from "./salesOrder";
 export * from "./mixDesign";
 export * from "./inventoryStock";
 export * from "./production";
+export * from "./qc";
+export * from "./notification";
