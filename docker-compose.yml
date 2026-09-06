@@ -1,0 +1,75 @@
+# Local development only — not a production deployment manifest (no
+# provider/orchestrator chosen yet, see CLAUDE.md). Copy .env.example to
+# .env first; see README "First-time setup" for the bootstrap order
+# (postgres up -> migrate -> seed -> put the printed COMPANY_ID in .env).
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PG_OWNER_PASSWORD:-postgres_dev_password}
+      POSTGRES_DB: rmixerp
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: node:22-slim
+    working_dir: /workspace
+    command: sh -c "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @rmixerp/api dev"
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      MIGRATE_DATABASE_URL: postgres://postgres:${PG_OWNER_PASSWORD:-postgres_dev_password}@postgres:5432/rmixerp
+      DATABASE_URL: postgres://rmixerp_app:${APP_DB_ROLE_PASSWORD:-rmixerp_app_dev_password}@postgres:5432/rmixerp
+    volumes:
+      - .:/workspace
+      - node_modules_root:/workspace/node_modules
+      - node_modules_api:/workspace/apps/api/node_modules
+      - node_modules_db:/workspace/packages/db/node_modules
+      - node_modules_contract:/workspace/packages/contract/node_modules
+      - node_modules_core:/workspace/packages/core/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    image: node:22-slim
+    working_dir: /workspace
+    command: sh -c "corepack enable && pnpm install --frozen-lockfile && pnpm --filter @rmixerp/web dev -- --host"
+    ports:
+      - "5173:5173"
+    env_file:
+      - .env
+    environment:
+      API_PROXY_TARGET: http://api:3000
+    volumes:
+      - .:/workspace
+      - node_modules_root:/workspace/node_modules
+      - node_modules_web:/workspace/apps/web/node_modules
+      - node_modules_ui:/workspace/packages/ui/node_modules
+      - node_modules_contract:/workspace/packages/contract/node_modules
+      - node_modules_i18n:/workspace/packages/i18n/node_modules
+      - node_modules_core:/workspace/packages/core/node_modules
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
+  node_modules_root:
+  node_modules_api:
+  node_modules_web:
+  node_modules_db:
+  node_modules_contract:
+  node_modules_core:
+  node_modules_ui:
+  node_modules_i18n:
