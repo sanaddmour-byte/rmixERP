@@ -1,5 +1,31 @@
 @import "tailwindcss";
 
+@theme {
+  /* Brand: navy (primary/structure) + orange (accent/interactive). */
+  --color-navy-50: #eef2f8;
+  --color-navy-100: #d7e0ee;
+  --color-navy-200: #b0c1dd;
+  --color-navy-300: #7f9bc6;
+  --color-navy-400: #4f74a9;
+  --color-navy-500: #305583;
+  --color-navy-600: #1f3f68;
+  --color-navy-700: #16304f;
+  --color-navy-800: #0f2440;
+  --color-navy-900: #0a1930;
+  --color-navy-950: #060f1d;
+
+  --color-orange-50: #fff4ec;
+  --color-orange-100: #ffe4cc;
+  --color-orange-200: #ffc599;
+  --color-orange-300: #ffa15c;
+  --color-orange-400: #fb8332;
+  --color-orange-500: #f2660f;
+  --color-orange-600: #d9500a;
+  --color-orange-700: #b23c09;
+  --color-orange-800: #8f2f0d;
+  --color-orange-900: #74280f;
+}
+
 body {
   font-family:
     "Inter",

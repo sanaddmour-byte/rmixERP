@@ -5,7 +5,21 @@ export const LOCALE_STORAGE_KEY = "rmixerp-locale";
 
 export interface Translations {
   appName: string;
-  nav: { health: string; login: string };
+  nav: {
+    health: string;
+    login: string;
+    company: string;
+    branches: string;
+    users: string;
+    roles: string;
+    customers: string;
+    projects: string;
+    products: string;
+    priceLists: string;
+    chargeTypes: string;
+    rawMaterials: string;
+    vendors: string;
+  };
   login: {
     title: string;
     email: string;
@@ -24,13 +38,43 @@ export interface Translations {
     error: string;
     lastChecked: (time: string) => string;
   };
+  resource: {
+    new: string;
+    create: string;
+    save: string;
+    edit: string;
+    remove: string;
+    search: string;
+    exportCsv: string;
+    loading: string;
+    empty: string;
+    previous: string;
+    next: string;
+    pageOf: (page: number, totalPages: number, total: number) => string;
+    confirmRemove: string;
+    notFound: string;
+  };
   languageToggle: string;
 }
 
 export const translations: Record<Locale, Translations> = {
   en: {
     appName: "RMC ERP",
-    nav: { health: "System status", login: "Sign in" },
+    nav: {
+      health: "System status",
+      login: "Sign in",
+      company: "Company",
+      branches: "Branches",
+      users: "Users",
+      roles: "Roles",
+      customers: "Customers",
+      projects: "Projects",
+      products: "Products",
+      priceLists: "Price Lists",
+      chargeTypes: "Charge Types",
+      rawMaterials: "Raw Materials",
+      vendors: "Vendors",
+    },
     login: {
       title: "Sign in",
       email: "Email",
@@ -49,11 +93,41 @@ export const translations: Record<Locale, Translations> = {
       error: "Could not reach the API",
       lastChecked: (time) => `Last checked ${time}`,
     },
+    resource: {
+      new: "New",
+      create: "Create",
+      save: "Save",
+      edit: "Edit",
+      remove: "Remove",
+      search: "Search…",
+      exportCsv: "Export CSV",
+      loading: "Loading…",
+      empty: "No records yet.",
+      previous: "Previous",
+      next: "Next",
+      pageOf: (page, totalPages, total) => `Page ${page} of ${totalPages} (${total} total)`,
+      confirmRemove: "Remove this record?",
+      notFound: "Record not found.",
+    },
     languageToggle: "العربية",
   },
   ar: {
     appName: "نظام رميكس",
-    nav: { health: "حالة النظام", login: "تسجيل الدخول" },
+    nav: {
+      health: "حالة النظام",
+      login: "تسجيل الدخول",
+      company: "الشركة",
+      branches: "الفروع",
+      users: "المستخدمون",
+      roles: "الأدوار",
+      customers: "العملاء",
+      projects: "المشاريع",
+      products: "المنتجات",
+      priceLists: "قوائم الأسعار",
+      chargeTypes: "أنواع الرسوم",
+      rawMaterials: "المواد الخام",
+      vendors: "الموردون",
+    },
     login: {
       title: "تسجيل الدخول",
       email: "البريد الإلكتروني",
@@ -71,6 +145,22 @@ export const translations: Record<Locale, Translations> = {
       ok: "جميع الأنظمة تعمل بشكل طبيعي",
       error: "تعذر الوصول إلى واجهة البرمجة",
       lastChecked: (time) => `آخر تحقق ${time}`,
+    },
+    resource: {
+      new: "جديد",
+      create: "إنشاء",
+      save: "حفظ",
+      edit: "تعديل",
+      remove: "حذف",
+      search: "بحث…",
+      exportCsv: "تصدير CSV",
+      loading: "جارٍ التحميل…",
+      empty: "لا توجد سجلات بعد.",
+      previous: "السابق",
+      next: "التالي",
+      pageOf: (page, totalPages, total) => `صفحة ${page} من ${totalPages} (${total} إجمالي)`,
+      confirmRemove: "هل تريد حذف هذا السجل؟",
+      notFound: "لم يتم العثور على السجل.",
     },
     languageToggle: "English",
   },
