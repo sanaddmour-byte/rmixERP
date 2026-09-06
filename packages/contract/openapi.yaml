@@ -39,6 +39,7 @@ tags:
   - name: trucks
   - name: drivers
   - name: deliveryOrders
+  - name: invoices
 
 paths:
   /health:
@@ -2725,6 +2726,152 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /delivery-orders/{id}/invoice:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: generateInvoice
+      tags: [invoices]
+      summary: >
+        Generate an invoice (or a cross-referencing combined+split pair)
+        atomically from one delivered delivery order (DOMAIN.md's Billing
+        section / CLAUDE.md's tax conventions). `combined` produces one
+        invoice with a taxable concrete line and an exempt delivery line;
+        `split` produces two invoices, each with one line, cross-referencing
+        each other via `relatedInvoiceId`. DOMAIN.md Invariant 1 ("a
+        delivery order can be invoiced once") is enforced by a DB unique
+        constraint on (deliveryOrderId, taxTreatment), not application
+        logic alone — a second attempt against the same delivery order
+        returns 409 regardless of mode, and under concurrent identical
+        requests exactly one succeeds. Accepts an `Idempotency-Key` header.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenerateInvoiceRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GenerateInvoiceResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "409":
+          description: This delivery order has already been invoiced
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /invoices:
+    get:
+      operationId: listInvoices
+      tags: [invoices]
+      summary: List invoices.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: status
+          in: query
+          schema:
+            { type: string, enum: [draft, pending_clearance, cleared, issued, partially_paid, paid, rejected] }
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: customerId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoiceListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /invoices/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getInvoice
+      tags: [invoices]
+      summary: Get an invoice (with its lines and any credit/debit notes) by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoiceDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /invoices/{id}/credit-notes:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: createCreditNote
+      tags: [invoices]
+      summary: Record a credit note against an invoice.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCreditNoteRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoiceDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /invoices/{id}/debit-notes:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: createDebitNote
+      tags: [invoices]
+      summary: Record a debit note against an invoice.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateDebitNoteRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoiceDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -3975,15 +4122,20 @@ components:
     DeliveryOrder:
       type: object
       required:
-        [id, companyId, branchId, salesOrderId, productionOrderId, batchRecordId, truckId, driverId, quantityM3,
-         status, scheduledAt, dispatchedAt, deliveredAt, qcFlagged, qcFlagReason, creditCheckPolicy,
-         creditCheckOutstandingJod, creditCheckExceedsByJod, creditOverride, creditOverrideReason, creditOverrideBy,
-         notes, createdAt, updatedAt, voidedAt]
+        [id, companyId, branchId, salesOrderId, salesOrderLineId, productionOrderId, batchRecordId, truckId,
+         driverId, quantityM3, status, scheduledAt, dispatchedAt, deliveredAt, qcFlagged, qcFlagReason,
+         creditCheckPolicy, creditCheckOutstandingJod, creditCheckExceedsByJod, creditOverride, creditOverrideReason,
+         creditOverrideBy, notes, createdAt, updatedAt, voidedAt]
       properties:
         id: { type: string, format: uuid }
         companyId: { type: string, format: uuid }
         branchId: { type: string, format: uuid }
         salesOrderId: { type: string, format: uuid }
+        salesOrderLineId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Which sales-order line this delivery fulfills — required before this delivery order can be invoiced (Phase 6).
         productionOrderId: { type: string, format: uuid, nullable: true }
         batchRecordId: { type: string, format: uuid, nullable: true }
         truckId: { type: string, format: uuid, nullable: true }
@@ -4013,6 +4165,7 @@ components:
       properties:
         branchId: { type: string, format: uuid }
         salesOrderId: { type: string, format: uuid }
+        salesOrderLineId: { type: string, format: uuid, nullable: true }
         productionOrderId: { type: string, format: uuid, nullable: true }
         batchRecordId: { type: string, format: uuid, nullable: true }
         quantityM3: { type: string }
@@ -4096,3 +4249,130 @@ components:
       required: [items]
       properties:
         items: { type: array, items: { $ref: "#/components/schemas/DispatchScheduleItem" } }
+
+    Invoice:
+      type: object
+      required:
+        [id, companyId, branchId, customerId, invoiceNumber, status, invoicedAt, relatedInvoiceId, subtotalJod,
+         taxJod, totalJod, notes, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        invoiceNumber: { type: string, description: "Gapless {BRANCH}-{YYMM}-{SEQ}, allocated in the same transaction as the invoice." }
+        status: { type: string, enum: [draft, pending_clearance, cleared, issued, partially_paid, paid, rejected] }
+        invoicedAt: { type: string, format: date-time }
+        relatedInvoiceId:
+          type: string
+          format: uuid
+          nullable: true
+          description: The other invoice in a combined+split pair — null for a combined invoice.
+        subtotalJod: { type: string }
+        taxJod: { type: string }
+        totalJod: { type: string }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+
+    InvoiceLine:
+      type: object
+      required:
+        [id, companyId, invoiceId, deliveryOrderId, taxTreatment, description, quantityM3, unitPriceJod, netJod,
+         taxRateBasisPoints, taxJod, totalJod, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        invoiceId: { type: string, format: uuid }
+        deliveryOrderId: { type: string, format: uuid, nullable: true }
+        taxTreatment: { type: string, enum: [taxable, exempt] }
+        description: { type: string }
+        quantityM3: { type: string, nullable: true }
+        unitPriceJod: { type: string, nullable: true }
+        netJod: { type: string }
+        taxRateBasisPoints: { type: integer }
+        taxJod: { type: string }
+        totalJod: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    CreditNote:
+      type: object
+      required:
+        [id, companyId, branchId, invoiceId, noteNumber, amountJod, taxJod, totalJod, reason, createdAt, updatedAt,
+         voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        invoiceId: { type: string, format: uuid }
+        noteNumber: { type: string }
+        amountJod: { type: string }
+        taxJod: { type: string }
+        totalJod: { type: string }
+        reason: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateCreditNoteRequest:
+      type: object
+      required: [amountJod, reason]
+      properties:
+        amountJod: { type: string }
+        taxJod: { type: string }
+        reason: { type: string, minLength: 1 }
+
+    DebitNote:
+      type: object
+      required:
+        [id, companyId, branchId, invoiceId, noteNumber, amountJod, taxJod, totalJod, reason, createdAt, updatedAt,
+         voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        invoiceId: { type: string, format: uuid }
+        noteNumber: { type: string }
+        amountJod: { type: string }
+        taxJod: { type: string }
+        totalJod: { type: string }
+        reason: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateDebitNoteRequest:
+      type: object
+      required: [amountJod, reason]
+      properties:
+        amountJod: { type: string }
+        taxJod: { type: string }
+        reason: { type: string, minLength: 1 }
+
+    InvoiceDetail:
+      allOf:
+        - $ref: "#/components/schemas/Invoice"
+        - type: object
+          required: [lines, creditNotes, debitNotes]
+          properties:
+            lines: { type: array, items: { $ref: "#/components/schemas/InvoiceLine" } }
+            creditNotes: { type: array, items: { $ref: "#/components/schemas/CreditNote" } }
+            debitNotes: { type: array, items: { $ref: "#/components/schemas/DebitNote" } }
+    InvoiceListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Invoice" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    GenerateInvoiceRequest:
+      type: object
+      required: [mode]
+      properties:
+        mode: { type: string, enum: [combined, split] }
+    GenerateInvoiceResult:
+      type: object
+      required: [invoices]
+      properties:
+        invoices: { type: array, items: { $ref: "#/components/schemas/InvoiceDetail" } }
