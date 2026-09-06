@@ -17,6 +17,9 @@ import { RawMaterialsPage } from "./routes/RawMaterialsPage";
 import { VendorsPage } from "./routes/VendorsPage";
 import { QuotationsPage } from "./routes/QuotationsPage";
 import { SalesOrdersPage } from "./routes/SalesOrdersPage";
+import { MixDesignsPage } from "./routes/MixDesignsPage";
+import { InventoryPage } from "./routes/InventoryPage";
+import { ProductionOrdersPage } from "./routes/ProductionOrdersPage";
 import { clearSession, getAccessToken } from "./lib/session";
 import { useCurrentUser } from "./lib/useCurrentUser";
 
@@ -34,6 +37,9 @@ const MASTER_DATA_LINKS: { href: string; labelKey: keyof Translations["nav"] }[]
   { href: "/vendors", labelKey: "vendors" },
   { href: "/quotations", labelKey: "quotations" },
   { href: "/sales-orders", labelKey: "salesOrders" },
+  { href: "/mix-designs", labelKey: "mixDesigns" },
+  { href: "/inventory", labelKey: "inventory" },
+  { href: "/production-orders", labelKey: "productionOrders" },
 ];
 
 function Nav() {
@@ -118,6 +124,9 @@ export function App() {
           <Route path="/vendors" component={VendorsPage} />
           <Route path="/quotations" component={QuotationsPage} />
           <Route path="/sales-orders" component={SalesOrdersPage} />
+          <Route path="/mix-designs" component={MixDesignsPage} />
+          <Route path="/inventory" component={InventoryPage} />
+          <Route path="/production-orders" component={ProductionOrdersPage} />
           <Route path="/" component={HealthPage} />
         </Switch>
       </main>
