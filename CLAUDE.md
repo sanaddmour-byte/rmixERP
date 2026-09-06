@@ -13,7 +13,12 @@ read it before writing code, and update it if a convention changes.
   - `packages/db` — Drizzle ORM schema + migrations (PostgreSQL 16)
   - `packages/contract` — OpenAPI 3.1 spec + generated TS client / React Query
     hooks / Zod schemas
-  - `packages/ui` — shared presentational components (web)
+  - `packages/ui` — shared presentational components (web; shadcn/ui-style
+    primitives built on `class-variance-authority`/`clsx`/`tailwind-merge` —
+    add more via `npx shadcn add <component>` as each phase needs them)
+  - `packages/i18n` — the single source of truth for en/ar translation
+    strings, shared by web and mobile (each owns its own locale
+    persistence/RTL mechanism, since those are platform-specific)
   - `packages/core` — framework-free domain logic: `Fils` money type, state
     machines, validators, `ClearanceProvider` interface, price resolution
 - **Validation**: Zod, generated from / aligned with the OpenAPI contract.
@@ -42,6 +47,7 @@ packages/
   db/            Drizzle schema, migrations, seed/ (never imported by prod code)
   contract/      openapi.yaml (source of truth) + generated/ (client, hooks, zod)
   ui/            shared React components (web)
+  i18n/          en/ar translation strings shared by web + mobile
   core/          Fils type, state machines, ClearanceProvider, validators,
                  price resolution, holiday calendar
 docs/
@@ -54,8 +60,9 @@ docs/
 
 Run from repo root unless noted.
 
-- `pnpm dev` — run api + web (+ mobile via its own `pnpm --filter mobile dev`)
-- `pnpm typecheck` — TS project references across all packages
+- `pnpm dev` — run api + web (+ mobile via its own `pnpm --filter @rmixerp/mobile dev`,
+  which needs Expo Go or a simulator/device — it isn't started by `pnpm dev`)
+- `pnpm typecheck` — `tsc --noEmit` in every package (via Turborepo)
 - `pnpm lint` — ESLint across all packages
 - `pnpm test` — Vitest units/services + Supertest integration
 - `pnpm test:e2e` — Playwright (4 critical flows)
@@ -104,6 +111,12 @@ than silently omitting it.
 
 - `any` is banned. `@ts-expect-error` requires a comment with an issue
   reference.
+- Relative imports never carry a `.js` extension (`from "./foo"`, not
+  `from "./foo.js"`). Vite/tsx/tsc's Bundler resolution accept either
+  style, but Metro (`apps/mobile`) only resolves the extensionless form —
+  a `.js`-suffixed relative import silently breaks the mobile bundle. This
+  applies repo-wide, including packages `apps/mobile` never imports today,
+  so the convention doesn't quietly break the day it does.
 - Every business table carries `company_id`, `branch_id`, `created_at`,
   `updated_at`, `created_by`, and soft-delete `voided_at`. Tenancy is
   enforced in **one** query guard in the data layer (`packages/db`), never
