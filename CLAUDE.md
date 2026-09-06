@@ -66,6 +66,19 @@ Run from repo root unless noted.
 
 A phase is not done until `pnpm typecheck && pnpm lint && pnpm test` are green.
 
+## Mobile parity
+
+Mobile is not a catch-all built after the fact. Every phase that ships a
+web screen ships the equivalent mobile screen(s) *in that same phase*,
+against the same generated hooks — see `docs/PLAN.md` for how each phase
+after Phase 0 is scoped for this. A module is not "done" if it works on
+web but not on mobile for the roles who need it in the field (driver,
+operator, QC technician, collector, dispatcher, approver, sales rep). Back
+office-only screens (GL, financial statements, the clearance admin queue)
+are the exception and stay web-only — call this out explicitly in a
+phase's plan if you're deliberately skipping mobile for a screen, rather
+than silently omitting it.
+
 ## Money, units, tax conventions
 
 - Currency is **JOD, 3 decimal places (fils)**. Every monetary value is
