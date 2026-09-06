@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+body {
+  font-family:
+    "Inter",
+    "Noto Sans Arabic",
+    system-ui,
+    sans-serif;
+}
+
+[dir="rtl"] {
+  text-align: right;
+}
