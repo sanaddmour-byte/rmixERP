@@ -19,3 +19,5 @@ export * from "./inventoryStock";
 export * from "./production";
 export * from "./qc";
 export * from "./notification";
+export * from "./fleet";
+export * from "./delivery";

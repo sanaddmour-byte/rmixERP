@@ -26,6 +26,10 @@ export interface Translations {
     productionOrders: string;
     qc: string;
     notifications: string;
+    trucks: string;
+    drivers: string;
+    dispatch: string;
+    myDeliveries: string;
   };
   login: {
     title: string;
@@ -88,6 +92,10 @@ export const translations: Record<Locale, Translations> = {
       productionOrders: "Production Orders",
       qc: "QC",
       notifications: "Notifications",
+      trucks: "Trucks",
+      drivers: "Drivers",
+      dispatch: "Dispatch",
+      myDeliveries: "My Deliveries",
     },
     login: {
       title: "Sign in",
@@ -148,6 +156,10 @@ export const translations: Record<Locale, Translations> = {
       productionOrders: "أوامر الإنتاج",
       qc: "مراقبة الجودة",
       notifications: "الإشعارات",
+      trucks: "الشاحنات",
+      drivers: "السائقون",
+      dispatch: "التوزيع",
+      myDeliveries: "توصيلاتي",
     },
     login: {
       title: "تسجيل الدخول",

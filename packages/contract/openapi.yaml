@@ -36,6 +36,9 @@ tags:
   - name: productionOrders
   - name: qc
   - name: notifications
+  - name: trucks
+  - name: drivers
+  - name: deliveryOrders
 
 paths:
   /health:
@@ -2345,6 +2348,383 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /trucks:
+    get:
+      operationId: listTrucks
+      tags: [trucks]
+      summary: List trucks.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/QParam"
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TruckListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createTruck
+      tags: [trucks]
+      summary: Create a truck.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTruckRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Truck" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /trucks/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getTruck
+      tags: [trucks]
+      summary: Get a truck by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Truck" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateTruck
+      tags: [trucks]
+      summary: Update a truck.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateTruckRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Truck" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: voidTruck
+      tags: [trucks]
+      summary: Void a truck.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "204": { description: No Content }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /drivers:
+    get:
+      operationId: listDrivers
+      tags: [drivers]
+      summary: List drivers.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/QParam"
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DriverListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createDriver
+      tags: [drivers]
+      summary: Create a driver.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateDriverRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Driver" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /drivers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getDriver
+      tags: [drivers]
+      summary: Get a driver by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Driver" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateDriver
+      tags: [drivers]
+      summary: Update a driver.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateDriverRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Driver" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: voidDriver
+      tags: [drivers]
+      summary: Void a driver.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "204": { description: No Content }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /delivery-orders:
+    get:
+      operationId: listDeliveryOrders
+      tags: [deliveryOrders]
+      summary: >
+        List delivery orders. `qcFlagged`/`qcFlagReason` on each item are
+        derived from the batch it was drawn from (when known), not stored —
+        DOMAIN.md Invariant 6's "flags every delivery drawn from that batch".
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: status
+          in: query
+          schema: { type: string, enum: [planned, dispatched, delivered, invoiced] }
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: driverId
+          in: query
+          description: Filter to deliveries assigned to one driver — the mobile driver app's "my deliveries" list.
+          schema: { type: string, format: uuid }
+        - name: scheduledFrom
+          in: query
+          description: Inclusive lower bound on scheduledAt (for the dispatch board's date range).
+          schema: { type: string, format: date-time }
+        - name: scheduledTo
+          in: query
+          description: Inclusive upper bound on scheduledAt.
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeliveryOrderListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createDeliveryOrder
+      tags: [deliveryOrders]
+      summary: Create a planned delivery order against a confirmed sales order.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateDeliveryOrderRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeliveryOrder" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /delivery-orders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getDeliveryOrder
+      tags: [deliveryOrders]
+      summary: Get a delivery order (with its proof of delivery, once delivered) by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeliveryOrderDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateDeliveryOrder
+      tags: [deliveryOrders]
+      summary: Update a planned delivery order's notes/schedule/quantity.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateDeliveryOrderRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeliveryOrderDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /delivery-orders/{id}/dispatch:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: dispatchDeliveryOrder
+      tags: [deliveryOrders]
+      summary: >
+        Assign a truck/driver and transition planned -> dispatched.
+        Re-evaluates the customer's credit standing (DOMAIN.md/PLAN.md
+        "credit check re-evaluated at dispatch", on top of Phase 2's
+        confirm-time check) — a `block`-policy customer over their limit
+        returns 409 unless a mandatory-reason override is supplied, which
+        additionally requires the `deliveryOrders:approve` permission and
+        is audited, mirroring Phase 2/3's override pattern.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DispatchDeliveryOrderRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeliveryOrderDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "409":
+          description: Blocked — customer's credit standing exceeds their limit
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /delivery-orders/{id}/deliver:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: deliverDeliveryOrder
+      tags: [deliveryOrders]
+      summary: >
+        Record the proof of delivery and transition dispatched -> delivered
+        in one transaction — DOMAIN.md Invariant 5 (cannot be delivered
+        without a proof of delivery carrying a customer signature) is
+        structural here: there is no other way to reach `delivered`.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeliverDeliveryOrderRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeliveryOrderDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /dispatch/schedule:
+    get:
+      operationId: getDispatchSchedule
+      tags: [deliveryOrders]
+      summary: >
+        Planned-vs-actual delivery timings for a branch/date range — the
+        data behind the web dispatch board's Gantt-style plant schedule.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: branchId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DispatchScheduleResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -3506,3 +3886,213 @@ components:
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
+
+    Truck:
+      type: object
+      required: [id, companyId, branchId, plateNumber, capacityM3, isActive, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        plateNumber: { type: string }
+        capacityM3: { type: string, nullable: true }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateTruckRequest:
+      type: object
+      required: [branchId, plateNumber]
+      properties:
+        branchId: { type: string, format: uuid }
+        plateNumber: { type: string, minLength: 1 }
+        capacityM3: { type: string, nullable: true }
+        isActive: { type: boolean }
+    UpdateTruckRequest:
+      type: object
+      properties:
+        branchId: { type: string, format: uuid }
+        plateNumber: { type: string, minLength: 1 }
+        capacityM3: { type: string, nullable: true }
+        isActive: { type: boolean }
+    TruckListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Truck" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    Driver:
+      type: object
+      required:
+        [id, companyId, branchId, name, phone, licenseNumber, isActive, userId, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        name: { type: string }
+        phone: { type: string, nullable: true }
+        licenseNumber: { type: string, nullable: true }
+        isActive: { type: boolean }
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Optional link to the login this driver uses on mobile, to resolve "my assigned deliveries".
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateDriverRequest:
+      type: object
+      required: [branchId, name]
+      properties:
+        branchId: { type: string, format: uuid }
+        name: { type: string, minLength: 1 }
+        phone: { type: string, nullable: true }
+        licenseNumber: { type: string, nullable: true }
+        isActive: { type: boolean }
+        userId: { type: string, format: uuid, nullable: true }
+    UpdateDriverRequest:
+      type: object
+      properties:
+        branchId: { type: string, format: uuid }
+        name: { type: string, minLength: 1 }
+        phone: { type: string, nullable: true }
+        licenseNumber: { type: string, nullable: true }
+        isActive: { type: boolean }
+        userId: { type: string, format: uuid, nullable: true }
+    DriverListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Driver" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    DeliveryOrder:
+      type: object
+      required:
+        [id, companyId, branchId, salesOrderId, productionOrderId, batchRecordId, truckId, driverId, quantityM3,
+         status, scheduledAt, dispatchedAt, deliveredAt, qcFlagged, qcFlagReason, creditCheckPolicy,
+         creditCheckOutstandingJod, creditCheckExceedsByJod, creditOverride, creditOverrideReason, creditOverrideBy,
+         notes, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        salesOrderId: { type: string, format: uuid }
+        productionOrderId: { type: string, format: uuid, nullable: true }
+        batchRecordId: { type: string, format: uuid, nullable: true }
+        truckId: { type: string, format: uuid, nullable: true }
+        driverId: { type: string, format: uuid, nullable: true }
+        quantityM3: { type: string }
+        status: { type: string, enum: [planned, dispatched, delivered, invoiced] }
+        scheduledAt: { type: string, format: date-time }
+        dispatchedAt: { type: string, format: date-time, nullable: true }
+        deliveredAt: { type: string, format: date-time, nullable: true }
+        qcFlagged:
+          type: boolean
+          description: Derived from batchRecordId's batch — true when that batch failed its design-age cube test.
+        qcFlagReason: { type: string, nullable: true }
+        creditCheckPolicy: { type: string, enum: [none, warning, block], nullable: true }
+        creditCheckOutstandingJod: { type: string, nullable: true }
+        creditCheckExceedsByJod: { type: string, nullable: true }
+        creditOverride: { type: boolean }
+        creditOverrideReason: { type: string, nullable: true }
+        creditOverrideBy: { type: string, format: uuid, nullable: true }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateDeliveryOrderRequest:
+      type: object
+      required: [branchId, salesOrderId, quantityM3, scheduledAt]
+      properties:
+        branchId: { type: string, format: uuid }
+        salesOrderId: { type: string, format: uuid }
+        productionOrderId: { type: string, format: uuid, nullable: true }
+        batchRecordId: { type: string, format: uuid, nullable: true }
+        quantityM3: { type: string }
+        scheduledAt: { type: string, format: date-time }
+        notes: { type: string, nullable: true }
+    UpdateDeliveryOrderRequest:
+      type: object
+      properties:
+        quantityM3: { type: string }
+        scheduledAt: { type: string, format: date-time }
+        notes: { type: string, nullable: true }
+    DispatchDeliveryOrderRequest:
+      type: object
+      required: [truckId, driverId]
+      properties:
+        truckId: { type: string, format: uuid }
+        driverId: { type: string, format: uuid }
+        override:
+          type: object
+          nullable: true
+          required: [reason]
+          properties:
+            reason: { type: string, minLength: 1 }
+    DeliverDeliveryOrderRequest:
+      type: object
+      required: [receivedQuantityM3, signedByName, signatureData]
+      properties:
+        receivedQuantityM3: { type: string }
+        signedByName: { type: string, minLength: 1 }
+        signatureData: { type: string, description: "Base64 data URI captured from the driver app's signature pad." }
+        notes: { type: string, nullable: true }
+    DeliveryOrderListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/DeliveryOrder" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    ProofOfDelivery:
+      type: object
+      required: [id, companyId, deliveryOrderId, receivedQuantityM3, signedByName, signatureData, notes, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        deliveryOrderId: { type: string, format: uuid }
+        receivedQuantityM3: { type: string }
+        signedByName: { type: string }
+        signatureData: { type: string }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    DeliveryOrderDetail:
+      allOf:
+        - $ref: "#/components/schemas/DeliveryOrder"
+        - type: object
+          required: [proofOfDelivery]
+          properties:
+            proofOfDelivery:
+              allOf:
+                - $ref: "#/components/schemas/ProofOfDelivery"
+              nullable: true
+
+    DispatchScheduleItem:
+      type: object
+      required:
+        [id, status, quantityM3, scheduledAt, dispatchedAt, deliveredAt, truckId, driverId, customerName, qcFlagged]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [planned, dispatched, delivered, invoiced] }
+        quantityM3: { type: string }
+        scheduledAt: { type: string, format: date-time }
+        dispatchedAt: { type: string, format: date-time, nullable: true }
+        deliveredAt: { type: string, format: date-time, nullable: true }
+        truckId: { type: string, format: uuid, nullable: true }
+        driverId: { type: string, format: uuid, nullable: true }
+        customerName: { type: string }
+        qcFlagged: { type: boolean }
+    DispatchScheduleResponse:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/DispatchScheduleItem" } }
