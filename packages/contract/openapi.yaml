@@ -31,6 +31,9 @@ tags:
   - name: vendors
   - name: quotations
   - name: salesOrders
+  - name: mixDesigns
+  - name: inventory
+  - name: productionOrders
 
 paths:
   /health:
@@ -1747,6 +1750,423 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "400": { $ref: "#/components/responses/ValidationError" }
 
+  /mix-designs:
+    get:
+      operationId: listMixDesigns
+      tags: [mixDesigns]
+      summary: List mix designs.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/QParam"
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MixDesignListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createMixDesign
+      tags: [mixDesigns]
+      summary: Create a mix design (no ingredients yet).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateMixDesignRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MixDesignWithIngredients" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /mix-designs/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getMixDesign
+      tags: [mixDesigns]
+      summary: Get a mix design (with its ingredients) by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MixDesignWithIngredients" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateMixDesign
+      tags: [mixDesigns]
+      summary: Update a mix design.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateMixDesignRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MixDesignWithIngredients" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: voidMixDesign
+      tags: [mixDesigns]
+      summary: Soft-delete (void) a mix design.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "204": { description: Voided }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /mix-designs/{mixDesignId}/ingredients:
+    parameters:
+      - name: mixDesignId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: createMixDesignIngredient
+      tags: [mixDesigns]
+      summary: Add an ingredient line to a mix design.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateMixDesignIngredientRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MixDesignWithIngredients" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /mix-designs/{mixDesignId}/ingredients/{id}:
+    parameters:
+      - name: mixDesignId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: "#/components/parameters/IdParam"
+    delete:
+      operationId: voidMixDesignIngredient
+      tags: [mixDesigns]
+      summary: Soft-delete (void) a mix design ingredient.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MixDesignWithIngredients" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /stock-balances:
+    get:
+      operationId: listStockBalances
+      tags: [inventory]
+      summary: List stock balances (moving-average quantity/cost per branch + raw material).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: rawMaterialId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockBalanceListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /stock-adjustments:
+    get:
+      operationId: listStockAdjustments
+      tags: [inventory]
+      summary: List stock adjustments (the receipt/correction ledger).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: rawMaterialId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockAdjustmentListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createStockAdjustment
+      tags: [inventory]
+      summary: Record a manual stock adjustment (receipt if quantityDelta > 0, correction/write-off if < 0); re-averages cost on receipt.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateStockAdjustmentRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockAdjustment" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /production-orders:
+    get:
+      operationId: listProductionOrders
+      tags: [productionOrders]
+      summary: List production orders.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: status
+          in: query
+          schema: { type: string, enum: [planned, in_progress, completed, cancelled] }
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductionOrderListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createProductionOrder
+      tags: [productionOrders]
+      summary: Create a planned production order.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateProductionOrderRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductionOrderWithBatches" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /production-orders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getProductionOrder
+      tags: [productionOrders]
+      summary: Get a production order (with its batches and returns) by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductionOrderWithBatches" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateProductionOrder
+      tags: [productionOrders]
+      summary: Update a production order's notes.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateProductionOrderRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductionOrderWithBatches" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /production-orders/{id}/complete:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: completeProductionOrder
+      tags: [productionOrders]
+      summary: Transition in_progress -> completed (requires at least one batch).
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductionOrderWithBatches" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /production-orders/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: cancelProductionOrder
+      tags: [productionOrders]
+      summary: Transition planned|in_progress -> cancelled.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductionOrderWithBatches" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /production-orders/{id}/batches:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: recordBatch
+      tags: [productionOrders]
+      summary: >
+        Record a batch — the inventory-deduction event. Back-flushes
+        every mix-design ingredient against branch stock at moving-average
+        cost (moisture-adjusted; see CreateBatchRequest). Auto-transitions
+        the order from planned to in_progress on its first batch. A
+        consumption that would take an ingredient's stock negative returns
+        409 unless `override` is supplied, which additionally requires the
+        `productionOrders:approve` permission and is audited.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateBatchRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductionOrderWithBatches" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "409":
+          description: Blocked — would take an ingredient's stock negative
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /production-orders/{id}/returns:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: recordReturnedConcrete
+      tags: [productionOrders]
+      summary: Record unused concrete returned to the plant (does not reverse stock — materials were already consumed at batching).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateReturnedConcreteRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductionOrderWithBatches" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /production-orders/{id}/yield-variance:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getYieldVariance
+      tags: [productionOrders]
+      summary: >
+        Batched vs returned m3 for this production order (DOMAIN.md
+        Invariant 4). Delivery variance is null until Phase 5's
+        DeliveryOrder exists to supply actual delivered m3.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/YieldVarianceResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2537,3 +2957,243 @@ components:
           required: [lines]
           properties:
             lines: { type: array, items: { $ref: "#/components/schemas/SalesOrderLine" } }
+
+    MixDesign:
+      type: object
+      required: [id, companyId, branchId, productId, name, description, isActive, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateMixDesignRequest:
+      type: object
+      required: [branchId, productId, name]
+      properties:
+        branchId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        name: { type: string, minLength: 1 }
+        description: { type: string, nullable: true }
+        isActive: { type: boolean }
+    UpdateMixDesignRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string, nullable: true }
+        isActive: { type: boolean }
+    MixDesignListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/MixDesign" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    MixDesignIngredient:
+      type: object
+      required: [id, companyId, mixDesignId, rawMaterialId, quantityPerM3, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        mixDesignId: { type: string, format: uuid }
+        rawMaterialId: { type: string, format: uuid }
+        quantityPerM3: { type: string, description: "In the raw material's own unit, per m3 of concrete." }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateMixDesignIngredientRequest:
+      type: object
+      required: [rawMaterialId, quantityPerM3]
+      properties:
+        rawMaterialId: { type: string, format: uuid }
+        quantityPerM3: { type: string }
+    MixDesignWithIngredients:
+      allOf:
+        - $ref: "#/components/schemas/MixDesign"
+        - type: object
+          required: [ingredients]
+          properties:
+            ingredients: { type: array, items: { $ref: "#/components/schemas/MixDesignIngredient" } }
+
+    StockBalance:
+      type: object
+      required: [id, companyId, branchId, rawMaterialId, quantityOnHand, averageCostJod, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        rawMaterialId: { type: string, format: uuid }
+        quantityOnHand: { type: string }
+        averageCostJod: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    StockBalanceListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/StockBalance" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    StockAdjustment:
+      type: object
+      required:
+        [id, companyId, branchId, rawMaterialId, quantityDelta, unitCostJod, resultingQuantityOnHand,
+         resultingAverageCostJod, reason, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        rawMaterialId: { type: string, format: uuid }
+        quantityDelta: { type: string, description: "Positive = receipt, negative = correction/write-off." }
+        unitCostJod: { type: string, nullable: true, description: "Required for a positive (receipt) adjustment." }
+        resultingQuantityOnHand: { type: string }
+        resultingAverageCostJod: { type: string }
+        reason: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    CreateStockAdjustmentRequest:
+      type: object
+      required: [branchId, rawMaterialId, quantityDelta]
+      properties:
+        branchId: { type: string, format: uuid }
+        rawMaterialId: { type: string, format: uuid }
+        quantityDelta: { type: string }
+        unitCostJod: { type: string, nullable: true }
+        reason: { type: string, nullable: true }
+    StockAdjustmentListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/StockAdjustment" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    ProductionOrder:
+      type: object
+      required:
+        [id, companyId, branchId, productId, mixDesignId, salesOrderId, plannedQuantityM3, status, notes,
+         createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        mixDesignId: { type: string, format: uuid }
+        salesOrderId: { type: string, format: uuid, nullable: true }
+        plannedQuantityM3: { type: string }
+        status: { type: string, enum: [planned, in_progress, completed, cancelled] }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateProductionOrderRequest:
+      type: object
+      required: [branchId, productId, mixDesignId, plannedQuantityM3]
+      properties:
+        branchId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        mixDesignId: { type: string, format: uuid }
+        salesOrderId: { type: string, format: uuid, nullable: true }
+        plannedQuantityM3: { type: string }
+        notes: { type: string, nullable: true }
+    UpdateProductionOrderRequest:
+      type: object
+      properties:
+        notes: { type: string, nullable: true }
+    ProductionOrderListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ProductionOrder" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    MaterialConsumption:
+      type: object
+      required:
+        [id, companyId, batchRecordId, rawMaterialId, mixDesignQuantityPerM3, quantityConsumed, unitCostJod,
+         totalCostJod, wentNegative, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        batchRecordId: { type: string, format: uuid }
+        rawMaterialId: { type: string, format: uuid }
+        mixDesignQuantityPerM3: { type: string }
+        quantityConsumed: { type: string }
+        unitCostJod: { type: string }
+        totalCostJod: { type: string }
+        wentNegative: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    BatchRecord:
+      type: object
+      required:
+        [id, companyId, productionOrderId, batchNumber, targetQuantityM3, actualQuantityM3,
+         moistureAdjustmentBasisPoints, batchedAt, consumptions, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        productionOrderId: { type: string, format: uuid }
+        batchNumber: { type: integer }
+        targetQuantityM3: { type: string }
+        actualQuantityM3: { type: string }
+        moistureAdjustmentBasisPoints: { type: integer }
+        batchedAt: { type: string, format: date-time }
+        consumptions: { type: array, items: { $ref: "#/components/schemas/MaterialConsumption" } }
+        createdAt: { type: string, format: date-time }
+    CreateBatchRequest:
+      type: object
+      required: [targetQuantityM3, actualQuantityM3]
+      properties:
+        targetQuantityM3: { type: string }
+        actualQuantityM3: { type: string }
+        moistureAdjustmentBasisPoints: { type: integer }
+        override:
+          type: object
+          nullable: true
+          required: [reason]
+          properties:
+            reason: { type: string, minLength: 1 }
+
+    ReturnedConcrete:
+      type: object
+      required: [id, companyId, productionOrderId, quantityM3, reason, returnedAt, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        productionOrderId: { type: string, format: uuid }
+        quantityM3: { type: string }
+        reason: { type: string, nullable: true }
+        returnedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    CreateReturnedConcreteRequest:
+      type: object
+      required: [quantityM3]
+      properties:
+        quantityM3: { type: string }
+        reason: { type: string, nullable: true }
+
+    ProductionOrderWithBatches:
+      allOf:
+        - $ref: "#/components/schemas/ProductionOrder"
+        - type: object
+          required: [batches, returns]
+          properties:
+            batches: { type: array, items: { $ref: "#/components/schemas/BatchRecord" } }
+            returns: { type: array, items: { $ref: "#/components/schemas/ReturnedConcrete" } }
+
+    YieldVarianceResponse:
+      type: object
+      required: [netProducedM3, deliveryVarianceM3]
+      properties:
+        netProducedM3: { type: string }
+        deliveryVarianceM3: { type: string, nullable: true }
