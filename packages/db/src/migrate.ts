@@ -31,8 +31,13 @@ export async function runMigrations(options: RunMigrationsOptions): Promise<void
   try {
     const db = drizzle(pool);
 
-    await migrate(db, { migrationsFolder: path.join(__dirname, "migrations") });
-
+    // Must run BEFORE `migrate()`: the very first migration's
+    // `CREATE POLICY ... TO "rmixerp_app"` statement fails outright
+    // against a database where that role doesn't exist yet (e.g. a fresh
+    // CI Postgres service container) unless it's created first. This
+    // silently never surfaced against a long-lived local dev database,
+    // where the role — once created by an earlier run — was still there
+    // for every subsequent migration.
     await db.execute(sql`
       DO $$
       BEGIN
@@ -55,6 +60,13 @@ export async function runMigrations(options: RunMigrationsOptions): Promise<void
       $$;
     `);
     await db.execute(sql`GRANT USAGE ON SCHEMA public TO rmixerp_app`);
+
+    await migrate(db, { migrationsFolder: path.join(__dirname, "migrations") });
+
+    // Table-level grants run again after migrating: a new migration can
+    // add tables the role has no default-privilege grant for yet on a
+    // database whose ALTER DEFAULT PRIVILEGES was set before those tables
+    // existed.
     await db.execute(sql`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO rmixerp_app`);
     await db.execute(
       sql`ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO rmixerp_app`,
