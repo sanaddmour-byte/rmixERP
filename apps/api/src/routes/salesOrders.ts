@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   salesOrder,
   salesOrderLine,
@@ -9,6 +9,7 @@ import {
   withTenant,
   type Tx,
 } from "@rmixerp/db";
+import { computeOutstandingInvoiceExposure } from "../lib/creditExposure";
 import {
   assertSalesOrderTransition,
   decimalStringToMilliUnits,
@@ -182,7 +183,7 @@ salesOrdersRouter.get("/sales-orders", requireAuth, requirePermission(MODULE, "v
       customerId ? eq(salesOrder.customerId, customerId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(salesOrder).where(where).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(salesOrder).where(where).orderBy(desc(salesOrder.createdAt)).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(salesOrder).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };
@@ -603,22 +604,12 @@ salesOrdersRouter.post("/sales-orders/:id/confirm", requireAuth, requirePermissi
     const [cust] = await tx.select().from(customer).where(eq(customer.id, before.customerId));
     if (!cust) throw new Error("sales order references a missing customer");
 
-    const [outstandingRow] = await tx
-      .select({ outstanding: sql<string>`coalesce(sum(${salesOrder.totalFils}), 0)` })
-      .from(salesOrder)
-      .where(
-        and(
-          eq(salesOrder.customerId, before.customerId),
-          inArray(salesOrder.status, ["confirmed", "fulfilled"]),
-          isNull(salesOrder.voidedAt),
-          sql`${salesOrder.id} <> ${id}`,
-        ),
-      );
+    const currentOutstandingFils = await computeOutstandingInvoiceExposure(tx, before.customerId);
 
     const creditCheck = evaluateCreditCheck({
       policy: cust.creditPolicy,
       creditLimitFils: fils(cust.creditLimitFils),
-      currentOutstandingFils: fils(BigInt(outstandingRow?.outstanding ?? "0")),
+      currentOutstandingFils,
       newOrderAmountFils: fils(before.totalFils),
     });
 

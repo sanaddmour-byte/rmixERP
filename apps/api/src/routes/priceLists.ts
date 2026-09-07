@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, eq, ilike, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import { priceList, priceListLine, withTenant, type Tx } from "@rmixerp/db";
 import { fils, filsToJodString, jodStringToFils } from "@rmixerp/core";
 import {
@@ -107,7 +107,7 @@ priceListsRouter.get("/price-lists", requireAuth, requirePermission(MODULE, "vie
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(isNull(priceList.voidedAt), q ? ilike(priceList.name, `%${q}%`) : undefined);
     const [rows, countRows] = await Promise.all([
-      tx.select().from(priceList).where(where).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(priceList).where(where).orderBy(desc(priceList.createdAt)).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(priceList).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

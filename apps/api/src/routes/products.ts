@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, eq, ilike, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import { product, withTenant, type Tx } from "@rmixerp/db";
 import { CreateProductBody, UpdateProductBody, VoidProductBody, type Product } from "@rmixerp/contract";
 import { db } from "../db";
@@ -47,7 +47,7 @@ productsRouter.get("/products", requireAuth, requirePermission(MODULE, "view"), 
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(isNull(product.voidedAt), q ? ilike(product.name, `%${q}%`) : undefined);
     const [rows, countRows] = await Promise.all([
-      tx.select().from(product).where(where).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(product).where(where).orderBy(desc(product.createdAt)).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(product).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

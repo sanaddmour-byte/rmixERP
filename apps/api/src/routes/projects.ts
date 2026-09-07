@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, eq, ilike, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import { project, withTenant, type Tx } from "@rmixerp/db";
 import { CreateProjectBody, UpdateProjectBody, VoidProjectBody, type Project } from "@rmixerp/contract";
 import { db } from "../db";
@@ -50,7 +50,7 @@ projectsRouter.get("/projects", requireAuth, requirePermission(MODULE, "view"), 
       customerId ? eq(project.customerId, customerId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(project).where(where).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(project).where(where).orderBy(desc(project.createdAt)).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(project).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

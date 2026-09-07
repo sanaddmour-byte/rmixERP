@@ -77,12 +77,12 @@ function BatchQCPanel({ batchId, onCubeTestRecorded }: { batchId: string; onCube
   }
 
   return (
-    <div className="space-y-4 rounded-md border border-navy-200 bg-navy-50 p-3">
+    <div className="space-y-4 rounded-md border border-navy-200 bg-navy-50 dark:border-navy-700 dark:bg-navy-800 p-3">
       <div>
-        <p className="text-xs font-semibold text-navy-700">Fresh Tests</p>
+        <p className="text-xs font-semibold text-navy-700 dark:text-navy-300">Fresh Tests</p>
         {freshList.length === 0 && <p className="text-xs text-navy-400">None recorded.</p>}
         {freshList.map((f) => (
-          <div key={f.id} className="text-xs text-navy-600">
+          <div key={f.id} className="text-xs text-navy-600 dark:text-navy-300">
             Slump {f.slumpMm} mm
             {f.concreteTemperatureC && ` · ${f.concreteTemperatureC}°C`}
             {f.airContentPercent && ` · ${f.airContentPercent}% air`} ({new Date(f.testedAt).toLocaleString()})
@@ -110,13 +110,13 @@ function BatchQCPanel({ batchId, onCubeTestRecorded }: { batchId: string; onCube
       </div>
 
       <div>
-        <p className="text-xs font-semibold text-navy-700">Cube Tests</p>
+        <p className="text-xs font-semibold text-navy-700 dark:text-navy-300">Cube Tests</p>
         {cubeList.length === 0 && <p className="text-xs text-navy-400">None recorded.</p>}
         {cubeList.map((c) => (
           <div
             key={c.id}
             className={
-              c.pass === false ? "text-xs font-medium text-orange-700" : c.pass === true ? "text-xs text-green-700" : "text-xs text-navy-600"
+              c.pass === false ? "text-xs font-medium text-orange-700" : c.pass === true ? "text-xs text-green-700" : "text-xs text-navy-600 dark:text-navy-300"
             }
           >
             Set #{c.setNumber} — {c.ageDays}d — avg {c.averageStrengthMpa} MPa —{" "}
@@ -232,7 +232,7 @@ function ProductionOrderDetail({ orderId }: { orderId: string }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-4 text-sm text-navy-600">
+        <div className="flex flex-wrap gap-4 text-sm text-navy-600 dark:text-navy-300">
           <span>Planned: {o.plannedQuantityM3} m³</span>
           {yv && (
             <>
@@ -262,7 +262,7 @@ function ProductionOrderDetail({ orderId }: { orderId: string }) {
 
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-navy-200 text-left text-navy-500">
+            <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
               <th className="py-2 pe-4 font-medium">Batch #</th>
               <th className="py-2 pe-4 font-medium">Target m³</th>
               <th className="py-2 pe-4 font-medium">Actual m³</th>
@@ -274,7 +274,7 @@ function ProductionOrderDetail({ orderId }: { orderId: string }) {
           <tbody>
             {o.batches.map((batch) => (
               <React.Fragment key={batch.id}>
-                <tr className="border-b border-navy-100 align-top">
+                <tr className="border-b border-navy-100 dark:border-navy-800 align-top">
                   <td className="py-2 pe-4">{batch.batchNumber}</td>
                   <td className="py-2 pe-4">{batch.targetQuantityM3}</td>
                   <td className="py-2 pe-4">{batch.actualQuantityM3}</td>
@@ -364,9 +364,9 @@ function ProductionOrderDetail({ orderId }: { orderId: string }) {
         )}
 
         <div className="space-y-2">
-          <p className="text-sm font-semibold text-navy-700">Returned Concrete</p>
+          <p className="text-sm font-semibold text-navy-700 dark:text-navy-300">Returned Concrete</p>
           {o.returns.map((r) => (
-            <div key={r.id} className="text-sm text-navy-600">
+            <div key={r.id} className="text-sm text-navy-600 dark:text-navy-300">
               {r.quantityM3} m³ — {r.reason ?? "no reason given"} ({new Date(r.returnedAt).toLocaleString()})
             </div>
           ))}
@@ -440,7 +440,7 @@ export function ProductionOrdersPage() {
               <label className="flex flex-col gap-1 text-xs">
                 Branch
                 <select
-                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                   required
                   value={branchId}
                   onChange={(e) => setBranchId(e.target.value)}
@@ -458,7 +458,7 @@ export function ProductionOrdersPage() {
               <label className="flex flex-col gap-1 text-xs">
                 Product
                 <select
-                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                   required
                   value={productId}
                   onChange={(e) => setProductId(e.target.value)}
@@ -476,7 +476,7 @@ export function ProductionOrdersPage() {
               <label className="flex flex-col gap-1 text-xs">
                 Mix Design
                 <select
-                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                   required
                   value={mixDesignId}
                   onChange={(e) => setMixDesignId(e.target.value)}
@@ -507,7 +507,7 @@ export function ProductionOrdersPage() {
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Production Orders</CardTitle>
           <select
-            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm"
+            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
             value={status}
             onChange={(e) => {
               setStatus(e.target.value as ProductionOrderStatus | "");
@@ -524,7 +524,7 @@ export function ProductionOrdersPage() {
         <CardContent className="space-y-4">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-navy-200 text-left text-navy-500">
+              <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
                 <th className="py-2 pe-4 font-medium">Status</th>
                 <th className="py-2 pe-4 font-medium">Product</th>
                 <th className="py-2 pe-4 font-medium">Planned m³</th>
@@ -533,14 +533,14 @@ export function ProductionOrdersPage() {
             <tbody>
               {list.isLoading && (
                 <tr>
-                  <td colSpan={3} className="py-4 text-center text-navy-400">
+                  <td colSpan={3} className="py-4 text-center text-navy-400 dark:text-navy-500">
                     Loading…
                   </td>
                 </tr>
               )}
               {!list.isLoading && (body?.items.length ?? 0) === 0 && (
                 <tr>
-                  <td colSpan={3} className="py-4 text-center text-navy-400">
+                  <td colSpan={3} className="py-4 text-center text-navy-400 dark:text-navy-500">
                     No records yet.
                   </td>
                 </tr>
@@ -548,7 +548,7 @@ export function ProductionOrdersPage() {
               {body?.items.map((row) => (
                 <tr
                   key={row.id}
-                  className="cursor-pointer border-b border-navy-100 hover:bg-navy-50"
+                  className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800"
                   onClick={() => setSelectedId(row.id)}
                 >
                   <td className="py-2 pe-4 capitalize">{row.status.replace("_", " ")}</td>
@@ -558,7 +558,7 @@ export function ProductionOrdersPage() {
               ))}
             </tbody>
           </table>
-          <div className="flex items-center justify-between text-sm text-navy-500">
+          <div className="flex items-center justify-between text-sm text-navy-500 dark:text-navy-400">
             <span>
               Page {page} of {totalPages} ({body?.total ?? 0} total)
             </span>

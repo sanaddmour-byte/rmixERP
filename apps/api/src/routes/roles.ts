@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, eq, ilike, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import { role, rolePermission, withTenant, type Tx } from "@rmixerp/db";
 import { CreateRoleBody, UpdateRoleBody, VoidRoleBody, type Role } from "@rmixerp/contract";
 import { db } from "../db";
@@ -58,7 +58,7 @@ rolesRouter.get("/roles", requireAuth, requirePermission(MODULE, "view"), async 
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(isNull(role.voidedAt), q ? ilike(role.name, `%${q}%`) : undefined);
     const [rows, countRows] = await Promise.all([
-      tx.select().from(role).where(where).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(role).where(where).orderBy(desc(role.createdAt)).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(role).where(where),
     ]);
     const apiRows = await Promise.all(rows.map((r) => toApi(tx, r)));

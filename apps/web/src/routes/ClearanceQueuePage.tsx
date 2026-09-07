@@ -9,11 +9,19 @@ import {
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@rmixerp/ui";
 import { refetchOnSuccess } from "../lib/refetchOnSuccess";
 import { useModulePermissions } from "../lib/usePermissions";
+import { StatusBadge, type BadgeTone } from "../components/StatusBadge";
 
 type ClearanceStatus = ClearanceQueueItem["clearanceStatus"];
 type DocumentType = ClearanceQueueItem["documentType"];
 
 const PAGE_SIZE = 20;
+
+const CLEARANCE_STATUS_TONE: Record<ClearanceStatus, BadgeTone> = {
+  pending: "yellow",
+  retrying: "yellow",
+  cleared: "green",
+  rejected: "red",
+};
 
 /**
  * Back-office admin queue across invoices, credit notes, and debit notes
@@ -56,7 +64,7 @@ export function ClearanceQueuePage() {
         <CardTitle>Clearance Queue</CardTitle>
         <div className="flex gap-2">
           <select
-            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm"
+            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
             value={documentType}
             onChange={(e) => {
               setDocumentType(e.target.value as DocumentType | "");
@@ -69,7 +77,7 @@ export function ClearanceQueuePage() {
             <option value="debit_note">Debit Note</option>
           </select>
           <select
-            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm"
+            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
             value={status}
             onChange={(e) => {
               setStatus(e.target.value as ClearanceStatus | "");
@@ -87,7 +95,7 @@ export function ClearanceQueuePage() {
       <CardContent className="space-y-4">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-navy-200 text-left text-navy-500">
+            <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
               <th className="py-2 pe-4 font-medium">Document</th>
               <th className="py-2 pe-4 font-medium">Type</th>
               <th className="py-2 pe-4 font-medium">Status</th>
@@ -102,23 +110,25 @@ export function ClearanceQueuePage() {
           <tbody>
             {list.isLoading && (
               <tr>
-                <td colSpan={9} className="py-4 text-center text-navy-400">
+                <td colSpan={9} className="py-4 text-center text-navy-400 dark:text-navy-500">
                   Loading…
                 </td>
               </tr>
             )}
             {!list.isLoading && (body?.items.length ?? 0) === 0 && (
               <tr>
-                <td colSpan={9} className="py-4 text-center text-navy-400">
+                <td colSpan={9} className="py-4 text-center text-navy-400 dark:text-navy-500">
                   Nothing in the clearance queue.
                 </td>
               </tr>
             )}
             {body?.items.map((item) => (
-              <tr key={item.id} className="border-b border-navy-100">
+              <tr key={item.id} className="border-b border-navy-100 dark:border-navy-800">
                 <td className="py-2 pe-4">{item.documentNumber}</td>
                 <td className="py-2 pe-4 capitalize">{item.documentType.replace(/_/g, " ")}</td>
-                <td className="py-2 pe-4 capitalize">{item.clearanceStatus}</td>
+                <td className="py-2 pe-4">
+                  <StatusBadge label={item.clearanceStatus} tone={CLEARANCE_STATUS_TONE[item.clearanceStatus]} />
+                </td>
                 <td className="py-2 pe-4">{item.clearanceAttempts}</td>
                 <td className="py-2 pe-4">{item.clearanceIcv ?? "—"}</td>
                 <td className="py-2 pe-4">{item.clearanceNextRetryAt ? new Date(item.clearanceNextRetryAt).toLocaleString() : "—"}</td>
@@ -137,7 +147,7 @@ export function ClearanceQueuePage() {
             ))}
           </tbody>
         </table>
-        <div className="flex items-center justify-between text-sm text-navy-500">
+        <div className="flex items-center justify-between text-sm text-navy-500 dark:text-navy-400">
           <span>
             Page {page} of {totalPages} ({body?.total ?? 0} total)
           </span>

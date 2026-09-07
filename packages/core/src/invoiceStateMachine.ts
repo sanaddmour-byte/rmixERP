@@ -1,14 +1,15 @@
 /**
  * Explicit allowed-transition table (see DOMAIN.md's State machines
- * section). The full documented lifecycle is defined here now so later
- * phases never need to touch this table's shape — but Phase 6 (Invoicing)
- * only ever creates invoices in `draft`; it wires no transition routes.
- * `pending_clearance -> cleared -> issued` is Phase 7's clearance-before-
- * issue gate, and `partially_paid`/`paid` are Phase 8's collection
- * allocations. Reopening a `paid`/`partially_paid` invoice from a bounced
- * PDC or a reversed allocation (DOMAIN.md) is also Phase 8's concern —
- * those edges are added to this table when Receivables actually
- * implements bounce/reversal handling, not guessed here.
+ * section). Phase 6 (Invoicing) only ever created `draft` invoices. Phase
+ * 7 (Clearance) wired up `draft -> pending_clearance -> cleared/rejected
+ * -> issued`. Phase 8 (Receivables) wires up `issued -> partially_paid ->
+ * paid` (collection allocation, `packages/core`'s
+ * `deriveInvoiceStatusFromAllocations`) and the reopening edges DOMAIN.md
+ * describes ("reopened by a bounced PDC or reversed allocation back to
+ * its prior paid-state"): `paid -> partially_paid`, `paid -> issued`, and
+ * `partially_paid -> issued` — a reduction in allocated amount (a bounced
+ * cheque unwinding its allocation) can drop either state back down,
+ * derived the same way a increase raises it, never guessed independently.
  */
 
 export const INVOICE_STATUSES = [
@@ -27,8 +28,8 @@ const INVOICE_TRANSITIONS: Record<InvoiceStatus, readonly InvoiceStatus[]> = {
   pending_clearance: ["cleared", "rejected"],
   cleared: ["issued"],
   issued: ["partially_paid", "paid"],
-  partially_paid: ["paid"],
-  paid: [],
+  partially_paid: ["paid", "issued"],
+  paid: ["partially_paid", "issued"],
   // Terminal until corrected and resubmitted: a rejected invoice goes back
   // to draft for correction, then re-enters pending_clearance normally.
   rejected: ["draft"],

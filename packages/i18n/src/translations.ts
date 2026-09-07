@@ -6,6 +6,7 @@ export const LOCALE_STORAGE_KEY = "rmixerp-locale";
 export interface Translations {
   appName: string;
   nav: {
+    home: string;
     health: string;
     login: string;
     company: string;
@@ -32,6 +33,40 @@ export interface Translations {
     myDeliveries: string;
     invoices: string;
     clearanceQueue: string;
+    collections: string;
+    postDatedCheques: string;
+    receivablesReports: string;
+    customerStatement: string;
+    reports: string;
+  };
+  navGroups: {
+    sales: string;
+    operations: string;
+    procurement: string;
+    finance: string;
+    reports: string;
+    administration: string;
+  };
+  home: {
+    welcome: (name: string) => string;
+    subtitle: string;
+    systemStatus: string;
+  };
+  reportsHub: {
+    title: string;
+    subtitle: string;
+    financeSection: string;
+    operationsSection: string;
+    agingTitle: string;
+    creditControlTitle: string;
+    creditOverridesTitle: string;
+    customerStatementDesc: string;
+    agingDesc: string;
+    creditControlDesc: string;
+    creditOverridesDesc: string;
+    qcTraceabilityDesc: string;
+    productionYieldDesc: string;
+    openReport: string;
   };
   login: {
     title: string;
@@ -74,6 +109,7 @@ export const translations: Record<Locale, Translations> = {
   en: {
     appName: "RMC ERP",
     nav: {
+      home: "Home",
       health: "System status",
       login: "Sign in",
       company: "Company",
@@ -100,6 +136,40 @@ export const translations: Record<Locale, Translations> = {
       myDeliveries: "My Deliveries",
       invoices: "Invoices",
       clearanceQueue: "Clearance Queue",
+      collections: "Collections",
+      postDatedCheques: "Post-Dated Cheques",
+      receivablesReports: "Receivables Reports",
+      customerStatement: "Customer Statement",
+      reports: "Reports",
+    },
+    navGroups: {
+      sales: "Sales",
+      operations: "Operations",
+      procurement: "Procurement",
+      finance: "Finance",
+      reports: "Reports",
+      administration: "Administration",
+    },
+    home: {
+      welcome: (name) => `Welcome back, ${name}`,
+      subtitle: "Jump into an application below.",
+      systemStatus: "System status",
+    },
+    reportsHub: {
+      title: "Reports",
+      subtitle: "All reporting across modules, in one place.",
+      financeSection: "Finance & Receivables",
+      operationsSection: "Operations",
+      agingTitle: "Aging",
+      creditControlTitle: "Credit Control",
+      creditOverridesTitle: "Credit Overrides",
+      customerStatementDesc: "Running balance of a customer's invoices, credit notes, and collections.",
+      agingDesc: "Outstanding receivables grouped by how overdue they are.",
+      creditControlDesc: "Customer credit limits and current utilization.",
+      creditOverridesDesc: "Sales/delivery orders that were approved despite a credit block.",
+      qcTraceabilityDesc: "Cube-test results traced back to the batch and mix design that produced them.",
+      productionYieldDesc: "Planned vs. actual yield variance for production orders.",
+      openReport: "Open",
     },
     login: {
       title: "Sign in",
@@ -140,6 +210,7 @@ export const translations: Record<Locale, Translations> = {
   ar: {
     appName: "نظام رميكس",
     nav: {
+      home: "الرئيسية",
       health: "حالة النظام",
       login: "تسجيل الدخول",
       company: "الشركة",
@@ -166,6 +237,40 @@ export const translations: Record<Locale, Translations> = {
       myDeliveries: "توصيلاتي",
       invoices: "الفواتير",
       clearanceQueue: "قائمة التخليص",
+      collections: "التحصيلات",
+      postDatedCheques: "الشيكات المؤجلة",
+      receivablesReports: "تقارير الذمم المدينة",
+      customerStatement: "كشف حساب العميل",
+      reports: "التقارير",
+    },
+    navGroups: {
+      sales: "المبيعات",
+      operations: "العمليات",
+      procurement: "المشتريات",
+      finance: "المالية",
+      reports: "التقارير",
+      administration: "الإدارة",
+    },
+    home: {
+      welcome: (name) => `مرحباً بعودتك، ${name}`,
+      subtitle: "انتقل إلى أحد التطبيقات أدناه.",
+      systemStatus: "حالة النظام",
+    },
+    reportsHub: {
+      title: "التقارير",
+      subtitle: "جميع التقارير عبر الوحدات، في مكان واحد.",
+      financeSection: "المالية والذمم المدينة",
+      operationsSection: "العمليات",
+      agingTitle: "أعمار الديون",
+      creditControlTitle: "ضبط الائتمان",
+      creditOverridesTitle: "تجاوزات الائتمان",
+      customerStatementDesc: "الرصيد الجاري لفواتير العميل وإشعارات الدائن والتحصيلات.",
+      agingDesc: "الذمم المدينة المستحقة مجمعة حسب مدة التأخير.",
+      creditControlDesc: "حدود ائتمان العملاء ونسبة الاستخدام الحالية.",
+      creditOverridesDesc: "أوامر البيع أو التسليم التي تم اعتمادها رغم تجاوز حد الائتمان.",
+      qcTraceabilityDesc: "نتائج اختبار المكعبات مربوطة بالدفعة وتصميم الخلطة اللذين أنتجاها.",
+      productionYieldDesc: "الفرق بين الإنتاجية المخططة والفعلية لأوامر الإنتاج.",
+      openReport: "فتح",
     },
     login: {
       title: "تسجيل الدخول",

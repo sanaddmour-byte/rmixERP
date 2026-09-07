@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
 import { LanguageProvider } from "./i18n/LanguageContext";
+import { ThemeProvider } from "./theme/ThemeContext";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -16,9 +17,11 @@ if (!container) {
 createRoot(container).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <LanguageProvider>
-        <App />
-      </LanguageProvider>
+      <ThemeProvider>
+        <LanguageProvider>
+          <App />
+        </LanguageProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   </React.StrictMode>,
 );

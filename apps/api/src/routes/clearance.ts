@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { assertInvoiceTransition, fils, filsToJodString } from "@rmixerp/core";
-import { creditNote, debitNote, invoice, withTenant } from "@rmixerp/db";
+import { creditNote, customer, debitNote, invoice, withTenant } from "@rmixerp/db";
 import { db } from "../db";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requirePermission";
@@ -64,7 +64,13 @@ clearanceRouter.post("/invoices/:id/issue", requireAuth, requirePermission(MODUL
       return { kind: "not_cleared" as const, status: before.status };
     }
     assertInvoiceTransition(before.status, "issued");
-    const [after] = await tx.update(invoice).set({ status: "issued" }).where(eq(invoice.id, id)).returning();
+    // Set once, here, from the customer's payment terms as of issue time
+    // (packages/db's invoice.dueDate doc comment) — never recomputed
+    // later even if the customer's terms subsequently change.
+    const [custRow] = await tx.select().from(customer).where(eq(customer.id, before.customerId));
+    if (!custRow) throw new Error("invoice references a missing customer");
+    const dueDate = new Date(before.invoicedAt.getTime() + custRow.paymentTermsDays * 24 * 60 * 60 * 1000);
+    const [after] = await tx.update(invoice).set({ status: "issued", dueDate }).where(eq(invoice.id, id)).returning();
     if (!after) throw new Error("invoice update returned no row");
     await writeAudit(tx, {
       companyId: req.auth!.companyId,

@@ -49,6 +49,9 @@ const PERMISSION_MODULES = [
   "creditNotes",
   "debitNotes",
   "clearance",
+  "collections",
+  "postDatedCheques",
+  "receivablesReports",
 ] as const;
 const PERMISSION_ACTIONS = ["view", "create", "edit", "approve", "void"] as const;
 

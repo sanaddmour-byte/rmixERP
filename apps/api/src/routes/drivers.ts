@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, eq, ilike, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import { driver, withTenant, type Tx } from "@rmixerp/db";
 import { CreateDriverBody, UpdateDriverBody, VoidDriverBody, type Driver } from "@rmixerp/contract";
 import { db } from "../db";
@@ -51,7 +51,7 @@ driversRouter.get("/drivers", requireAuth, requirePermission(MODULE, "view"), as
       branchId ? eq(driver.branchId, branchId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(driver).where(where).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(driver).where(where).orderBy(desc(driver.createdAt)).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(driver).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

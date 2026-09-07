@@ -52,7 +52,7 @@ function PriceListLines({ priceListId }: { priceListId: string }) {
       <CardContent className="space-y-4">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-navy-200 text-left text-navy-500">
+            <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
               <th className="py-2 pe-4 font-medium">Product</th>
               <th className="py-2 pe-4 font-medium">Concrete (JOD)</th>
               <th className="py-2 pe-4 font-medium">Delivery (JOD)</th>
@@ -62,7 +62,7 @@ function PriceListLines({ priceListId }: { priceListId: string }) {
           </thead>
           <tbody>
             {lines.map((line) => (
-              <tr key={line.id} className="border-b border-navy-100">
+              <tr key={line.id} className="border-b border-navy-100 dark:border-navy-800">
                 <td className="py-2 pe-4">{productOptions.find((p) => p.id === line.productId)?.name ?? line.productId}</td>
                 <td className="py-2 pe-4">{line.concreteUnitPriceJod}</td>
                 <td className="py-2 pe-4">{line.deliveryUnitPriceJod}</td>
@@ -86,7 +86,7 @@ function PriceListLines({ priceListId }: { priceListId: string }) {
           <label className="flex flex-col gap-1 text-xs">
             Product
             <select
-              className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+              className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
               required
               value={productId}
               onChange={(e) => setProductId(e.target.value)}
@@ -207,7 +207,7 @@ export function PriceListsPage() {
         <label className="flex flex-col gap-1 text-sm">
           Manage lines for
           <select
-            className="h-10 max-w-sm rounded-md border border-navy-300 bg-white px-3 text-sm"
+            className="h-10 max-w-sm rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
             value={selectedId ?? ""}
             onChange={(e) => setSelectedId(e.target.value || null)}
           >
