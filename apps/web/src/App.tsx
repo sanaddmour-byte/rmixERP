@@ -38,6 +38,7 @@ import { ChartOfAccountsPage } from "./routes/ChartOfAccountsPage";
 import { GLReportsPage } from "./routes/GLReportsPage";
 import { FleetOpsAlertsPage } from "./routes/FleetOpsAlertsPage";
 import { ApprovalsInboxPage } from "./routes/ApprovalsInboxPage";
+import { NotificationsPage } from "./routes/NotificationsPage";
 
 export function App() {
   return (
@@ -82,6 +83,7 @@ export function App() {
           <Route path="/gl-reports" component={GLReportsPage} />
           <Route path="/fleet-alerts" component={FleetOpsAlertsPage} />
           <Route path="/approvals" component={ApprovalsInboxPage} />
+          <Route path="/notifications" component={NotificationsPage} />
           <Route path="/" component={HomePage} />
         </Switch>
       </main>

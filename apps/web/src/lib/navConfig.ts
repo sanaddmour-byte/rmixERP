@@ -35,6 +35,12 @@ export const NAV_GROUPS: NavGroup[] = [
       // the signed-in user actually holds, which a single NavItem module
       // gate can't express directly.
       { href: "/approvals", labelKey: "approvalsInbox", module: "purchaseOrders", icon: "checkCircle" },
+      // Same proxy-gate trade-off as approvalsInbox above: the page itself
+      // scopes its contents to whichever notification types this user's
+      // permissions actually cover (qc:view, purchaseRequests:approve,
+      // purchaseOrders:approve), which a single NavItem module gate can't
+      // express -- qc:view is picked here as the broadest-held of the three.
+      { href: "/notifications", labelKey: "notifications", module: "qc", icon: "bell" },
     ],
   },
   {

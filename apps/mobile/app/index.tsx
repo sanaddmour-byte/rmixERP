@@ -64,6 +64,9 @@ const PROCUREMENT_LINKS = [
 const OPS_LINKS = [
   { module: "purchaseOrders", href: "/approvals", labelKey: "approvalsInbox" },
   { module: "trucks", href: "/fleet-alerts", labelKey: "fleetAlerts" },
+  // Same proxy-gate trade-off as Approvals above — qc:view picked as the
+  // broadest-held of the three notification-producing modules.
+  { module: "qc", href: "/notifications", labelKey: "notifications" },
 ] as const;
 
 type LinkModule =
