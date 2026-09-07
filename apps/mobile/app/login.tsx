@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useLogin } from "@rmixerp/contract";
 import { useLanguage } from "../src/i18n/LanguageContext";
 import { setSession } from "../src/lib/session";
+import { colors } from "../src/theme";
 
 export default function LoginScreen() {
   const { t } = useLanguage();
@@ -44,7 +45,7 @@ export default function LoginScreen() {
           keyboardType="email-address"
           value={email}
           onChangeText={setEmail}
-          style={{ borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 6, padding: 10 }}
+          style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 6, padding: 10 }}
         />
       </View>
 
@@ -55,16 +56,16 @@ export default function LoginScreen() {
           autoComplete="current-password"
           value={password}
           onChangeText={setPassword}
-          style={{ borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 6, padding: 10 }}
+          style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 6, padding: 10 }}
         />
       </View>
 
-      {error && <Text style={{ color: "#dc2626" }}>{error}</Text>}
+      {error && <Text style={{ color: colors.danger }}>{error}</Text>}
 
       <Pressable
         onPress={handleSubmit}
         disabled={login.isPending}
-        style={{ backgroundColor: "#0f172a", borderRadius: 6, padding: 12, alignItems: "center" }}
+        style={{ backgroundColor: colors.navy, borderRadius: 6, padding: 12, alignItems: "center" }}
       >
         <Text style={{ color: "white", fontWeight: "600" }}>
           {login.isPending ? t.login.submitting : t.login.submit}

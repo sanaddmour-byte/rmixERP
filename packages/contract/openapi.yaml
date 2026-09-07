@@ -1,17 +1,35 @@
 openapi: 3.1.0
 info:
   title: RMC ERP API
-  version: 0.1.0
+  version: 0.2.0
   description: >
     Contract-first source of truth. The TS client, React Query hooks, and
     Zod request/response schemas consumed by apps/web and apps/mobile are
     generated from this file — see CLAUDE.md. Do not hand-write a fetch
     call that bypasses the generated hooks.
+
+    Money fields are JOD decimal strings (e.g. "1234.567"), never numbers
+    — formatting/parsing to the internal integer-fils representation
+    happens at this HTTP boundary (packages/core's jodStringToFils /
+    filsToJodString), matching CLAUDE.md's money conventions.
 servers:
   - url: /api
 tags:
   - name: system
   - name: auth
+  - name: company
+  - name: branches
+  - name: users
+  - name: roles
+  - name: permissions
+  - name: customers
+  - name: projects
+  - name: products
+  - name: priceLists
+  - name: chargeTypes
+  - name: rawMaterials
+  - name: vendors
+
 paths:
   /health:
     get:
@@ -112,77 +130,1148 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /company:
+    get:
+      operationId: getCompany
+      tags: [company]
+      summary: The single tenant company row.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Company" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    put:
+      operationId: updateCompany
+      tags: [company]
+      summary: Update company settings.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCompanyRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Company" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /branches:
+    get:
+      operationId: listBranches
+      tags: [branches]
+      summary: List branches.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/QParam"
+        - $ref: "#/components/parameters/FormatParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BranchListResponse" }
+            text/csv:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createBranch
+      tags: [branches]
+      summary: Create a branch.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateBranchRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Branch" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /branches/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getBranch
+      tags: [branches]
+      summary: Get a branch by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Branch" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateBranch
+      tags: [branches]
+      summary: Update a branch.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateBranchRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Branch" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: voidBranch
+      tags: [branches]
+      summary: Soft-delete (void) a branch.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "204": { description: Voided }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: List users.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/QParam"
+        - $ref: "#/components/parameters/FormatParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UserListResponse" }
+            text/csv:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: Create (invite) a user.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateUserRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /users/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getUser
+      tags: [users]
+      summary: Get a user by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateUser
+      tags: [users]
+      summary: Update a user (profile, branch, active state, role assignment).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateUserRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: voidUser
+      tags: [users]
+      summary: Deactivate a user.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "204": { description: Deactivated }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /roles:
+    get:
+      operationId: listRoles
+      tags: [roles]
+      summary: List roles.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/QParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RoleListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createRole
+      tags: [roles]
+      summary: Create a role with an initial permission set.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRoleRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /roles/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getRole
+      tags: [roles]
+      summary: Get a role (with its permissions) by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateRole
+      tags: [roles]
+      summary: Update a role's name and/or permission set.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateRoleRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Role" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: voidRole
+      tags: [roles]
+      summary: Soft-delete (void) a role.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "204": { description: Voided }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /permissions:
+    get:
+      operationId: listPermissions
+      tags: [permissions]
+      summary: The full system permission catalog (module x action). Read-only.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Permission" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: List customers.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/QParam"
+        - $ref: "#/components/parameters/FormatParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerListResponse" }
+            text/csv:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: Create a customer.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCustomerRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /customers/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getCustomer
+      tags: [customers]
+      summary: Get a customer by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: Update a customer.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCustomerRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: voidCustomer
+      tags: [customers]
+      summary: Soft-delete (void) a customer.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "204": { description: Voided }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      summary: List projects.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/QParam"
+        - name: customerId
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/FormatParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProjectListResponse" }
+            text/csv:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create a project.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateProjectRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /projects/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get a project by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateProject
+      tags: [projects]
+      summary: Update a project.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateProjectRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Project" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: voidProject
+      tags: [projects]
+      summary: Soft-delete (void) a project.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "204": { description: Voided }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: List products.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/QParam"
+        - $ref: "#/components/parameters/FormatParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductListResponse" }
+            text/csv:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: Create a product.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateProductRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /products/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: Get a product by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateProduct
+      tags: [products]
+      summary: Update a product.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateProductRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Product" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: voidProduct
+      tags: [products]
+      summary: Soft-delete (void) a product.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "204": { description: Voided }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /price-lists:
+    get:
+      operationId: listPriceLists
+      tags: [priceLists]
+      summary: List price lists.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/QParam"
+        - $ref: "#/components/parameters/FormatParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceListListResponse" }
+            text/csv:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createPriceList
+      tags: [priceLists]
+      summary: Create a price list (exactly one of projectId/customerId/branchId must match its tier).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePriceListRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /price-lists/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getPriceList
+      tags: [priceLists]
+      summary: Get a price list (with its lines) by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceListWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updatePriceList
+      tags: [priceLists]
+      summary: Update a price list's name/active state.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdatePriceListRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceList" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: voidPriceList
+      tags: [priceLists]
+      summary: Soft-delete (void) a price list.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "204": { description: Voided }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /price-lists/{priceListId}/lines:
+    parameters:
+      - name: priceListId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: createPriceListLine
+      tags: [priceLists]
+      summary: Add a product price line to a price list.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePriceListLineRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceListLine" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /price-lists/{priceListId}/lines/{id}:
+    parameters:
+      - name: priceListId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: "#/components/parameters/IdParam"
+    put:
+      operationId: updatePriceListLine
+      tags: [priceLists]
+      summary: Update a price list line.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdatePriceListLineRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceListLine" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: voidPriceListLine
+      tags: [priceLists]
+      summary: Soft-delete (void) a price list line.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "204": { description: Voided }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /charge-types:
+    get:
+      operationId: listChargeTypes
+      tags: [chargeTypes]
+      summary: List charge types.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/QParam"
+        - $ref: "#/components/parameters/FormatParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChargeTypeListResponse" }
+            text/csv:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createChargeType
+      tags: [chargeTypes]
+      summary: Create a charge type.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateChargeTypeRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChargeType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /charge-types/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getChargeType
+      tags: [chargeTypes]
+      summary: Get a charge type by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChargeType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateChargeType
+      tags: [chargeTypes]
+      summary: Update a charge type.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateChargeTypeRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ChargeType" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: voidChargeType
+      tags: [chargeTypes]
+      summary: Soft-delete (void) a charge type.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "204": { description: Voided }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /raw-materials:
+    get:
+      operationId: listRawMaterials
+      tags: [rawMaterials]
+      summary: List raw materials.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/QParam"
+        - $ref: "#/components/parameters/FormatParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RawMaterialListResponse" }
+            text/csv:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createRawMaterial
+      tags: [rawMaterials]
+      summary: Create a raw material.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateRawMaterialRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RawMaterial" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /raw-materials/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getRawMaterial
+      tags: [rawMaterials]
+      summary: Get a raw material by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RawMaterial" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateRawMaterial
+      tags: [rawMaterials]
+      summary: Update a raw material.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateRawMaterialRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RawMaterial" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: voidRawMaterial
+      tags: [rawMaterials]
+      summary: Soft-delete (void) a raw material.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "204": { description: Voided }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /vendors:
+    get:
+      operationId: listVendors
+      tags: [vendors]
+      summary: List vendors.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - $ref: "#/components/parameters/QParam"
+        - $ref: "#/components/parameters/FormatParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VendorListResponse" }
+            text/csv:
+              schema: { type: string }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createVendor
+      tags: [vendors]
+      summary: Create a vendor.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateVendorRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vendor" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /vendors/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getVendor
+      tags: [vendors]
+      summary: Get a vendor by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vendor" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateVendor
+      tags: [vendors]
+      summary: Update a vendor.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateVendorRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vendor" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      operationId: voidVendor
+      tags: [vendors]
+      summary: Soft-delete (void) a vendor.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "204": { description: Voided }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+
+  parameters:
+    IdParam:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PageParam:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1 }
+    PageSizeParam:
+      name: pageSize
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100 }
+    QParam:
+      name: q
+      in: query
+      description: Free-text search.
+      schema: { type: string }
+    FormatParam:
+      name: format
+      in: query
+      schema: { type: string, enum: [json, csv] }
+
+  responses:
+    Unauthorized:
+      description: Not authenticated
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Forbidden:
+      description: Missing permission
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+
   schemas:
     HealthResponse:
       type: object
       required: [status, time]
       properties:
-        status:
-          type: string
-          enum: [ok]
-        time:
-          type: string
-          format: date-time
+        status: { type: string, enum: [ok] }
+        time: { type: string, format: date-time }
 
     LoginRequest:
       type: object
       required: [email, password]
       properties:
-        email:
-          type: string
-          format: email
-        password:
-          type: string
-          minLength: 8
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
 
     RefreshRequest:
       type: object
       required: [refreshToken]
       properties:
-        refreshToken:
-          type: string
+        refreshToken: { type: string }
 
     AuthSession:
       type: object
       required: [accessToken, refreshToken, user]
       properties:
-        accessToken:
-          type: string
-        refreshToken:
-          type: string
-        user:
-          $ref: "#/components/schemas/CurrentUser"
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        user: { $ref: "#/components/schemas/CurrentUser" }
 
     CurrentUser:
       type: object
       required: [id, companyId, branchId, email, displayName, permissions]
       properties:
-        id:
-          type: string
-          format: uuid
-        companyId:
-          type: string
-          format: uuid
-        branchId:
-          type: string
-          format: uuid
-          nullable: true
-        email:
-          type: string
-          format: email
-        displayName:
-          type: string
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid, nullable: true }
+        email: { type: string, format: email }
+        displayName: { type: string }
         permissions:
           type: array
-          items:
-            type: string
-            description: "`${module}:${action}`, e.g. \"branches:view\""
+          items: { type: string, description: "`${module}:${action}`, e.g. \"branches:view\"" }
 
     ErrorResponse:
       type: object
@@ -192,9 +1281,492 @@ components:
           type: object
           required: [message, code]
           properties:
-            message:
-              type: string
-            code:
-              type: string
-            details:
-              type: object
+            message: { type: string }
+            code: { type: string }
+            details: { type: object }
+
+    VoidRequest:
+      type: object
+      properties:
+        reason: { type: string }
+
+    Company:
+      type: object
+      required: [id, name, taxNumber, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        taxNumber: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    UpdateCompanyRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        taxNumber: { type: string, nullable: true }
+
+    Branch:
+      type: object
+      required: [id, companyId, name, code, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        name: { type: string }
+        code: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateBranchRequest:
+      type: object
+      required: [name, code]
+      properties:
+        name: { type: string, minLength: 1 }
+        code: { type: string, minLength: 1, maxLength: 32 }
+    UpdateBranchRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        code: { type: string, minLength: 1, maxLength: 32 }
+    BranchListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Branch" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    User:
+      type: object
+      required: [id, companyId, branchId, email, displayName, isActive, roleIds, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid, nullable: true }
+        email: { type: string, format: email }
+        displayName: { type: string }
+        isActive: { type: boolean }
+        roleIds: { type: array, items: { type: string, format: uuid } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateUserRequest:
+      type: object
+      required: [email, displayName, password]
+      properties:
+        email: { type: string, format: email }
+        displayName: { type: string, minLength: 1 }
+        password: { type: string, minLength: 8 }
+        branchId: { type: string, format: uuid, nullable: true }
+        roleIds: { type: array, items: { type: string, format: uuid } }
+    UpdateUserRequest:
+      type: object
+      properties:
+        displayName: { type: string, minLength: 1 }
+        branchId: { type: string, format: uuid, nullable: true }
+        isActive: { type: boolean }
+        roleIds: { type: array, items: { type: string, format: uuid } }
+    UserListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/User" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    Permission:
+      type: object
+      required: [id, module, action]
+      properties:
+        id: { type: string, format: uuid }
+        module: { type: string }
+        action: { type: string }
+
+    Role:
+      type: object
+      required: [id, companyId, name, permissionIds, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        name: { type: string }
+        permissionIds: { type: array, items: { type: string, format: uuid } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateRoleRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        permissionIds: { type: array, items: { type: string, format: uuid } }
+    UpdateRoleRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        permissionIds: { type: array, items: { type: string, format: uuid } }
+    RoleListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Role" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    Customer:
+      type: object
+      required:
+        [id, companyId, branchId, name, customerType, phone, email, taxNumber, nationalId, address,
+         creditLimitJod, creditPolicy, paymentTermsDays, notes, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid, nullable: true }
+        name: { type: string }
+        customerType: { type: string, enum: [individual, company] }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        taxNumber: { type: string, nullable: true }
+        nationalId: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        creditLimitJod: { type: string, description: "Decimal JOD, e.g. \"5000.000\"" }
+        creditPolicy: { type: string, enum: [none, warning, block] }
+        paymentTermsDays: { type: integer }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateCustomerRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        customerType: { type: string, enum: [individual, company] }
+        branchId: { type: string, format: uuid, nullable: true }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        taxNumber: { type: string, nullable: true }
+        nationalId: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        creditLimitJod: { type: string }
+        creditPolicy: { type: string, enum: [none, warning, block] }
+        paymentTermsDays: { type: integer }
+        notes: { type: string, nullable: true }
+    UpdateCustomerRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        customerType: { type: string, enum: [individual, company] }
+        branchId: { type: string, format: uuid, nullable: true }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        taxNumber: { type: string, nullable: true }
+        nationalId: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        creditLimitJod: { type: string }
+        creditPolicy: { type: string, enum: [none, warning, block] }
+        paymentTermsDays: { type: integer }
+        notes: { type: string, nullable: true }
+    CustomerListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Customer" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    Project:
+      type: object
+      required: [id, companyId, branchId, customerId, name, address, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid, nullable: true }
+        customerId: { type: string, format: uuid }
+        name: { type: string }
+        address: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateProjectRequest:
+      type: object
+      required: [customerId, name]
+      properties:
+        customerId: { type: string, format: uuid }
+        name: { type: string, minLength: 1 }
+        branchId: { type: string, format: uuid, nullable: true }
+        address: { type: string, nullable: true }
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        branchId: { type: string, format: uuid, nullable: true }
+        address: { type: string, nullable: true }
+    ProjectListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Project" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    Product:
+      type: object
+      required:
+        [id, companyId, branchId, name, code, characteristicStrengthMpa, unit, description,
+         createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid, nullable: true }
+        name: { type: string }
+        code: { type: string }
+        characteristicStrengthMpa: { type: integer, nullable: true }
+        unit: { type: string }
+        description: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateProductRequest:
+      type: object
+      required: [name, code]
+      properties:
+        name: { type: string, minLength: 1 }
+        code: { type: string, minLength: 1, maxLength: 32 }
+        branchId: { type: string, format: uuid, nullable: true }
+        characteristicStrengthMpa: { type: integer, nullable: true }
+        unit: { type: string }
+        description: { type: string, nullable: true }
+    UpdateProductRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        code: { type: string, minLength: 1, maxLength: 32 }
+        branchId: { type: string, format: uuid, nullable: true }
+        characteristicStrengthMpa: { type: integer, nullable: true }
+        unit: { type: string }
+        description: { type: string, nullable: true }
+    ProductListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Product" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    PriceList:
+      type: object
+      required: [id, companyId, tier, projectId, customerId, branchId, name, isActive, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        tier: { type: string, enum: [project, customer, branch, company] }
+        projectId: { type: string, format: uuid, nullable: true }
+        customerId: { type: string, format: uuid, nullable: true }
+        branchId: { type: string, format: uuid, nullable: true }
+        name: { type: string }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreatePriceListRequest:
+      type: object
+      required: [tier, name]
+      properties:
+        tier: { type: string, enum: [project, customer, branch, company] }
+        name: { type: string, minLength: 1 }
+        projectId: { type: string, format: uuid, nullable: true }
+        customerId: { type: string, format: uuid, nullable: true }
+        branchId: { type: string, format: uuid, nullable: true }
+        isActive: { type: boolean }
+    UpdatePriceListRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        isActive: { type: boolean }
+    PriceListListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/PriceList" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    PriceListLine:
+      type: object
+      required:
+        [id, companyId, priceListId, productId, concreteUnitPriceJod, deliveryUnitPriceJod,
+         taxRateBasisPoints, effectiveFrom, effectiveTo, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        priceListId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        concreteUnitPriceJod: { type: string }
+        deliveryUnitPriceJod: { type: string }
+        taxRateBasisPoints: { type: integer }
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreatePriceListLineRequest:
+      type: object
+      required: [productId, concreteUnitPriceJod, deliveryUnitPriceJod, effectiveFrom]
+      properties:
+        productId: { type: string, format: uuid }
+        concreteUnitPriceJod: { type: string }
+        deliveryUnitPriceJod: { type: string }
+        taxRateBasisPoints: { type: integer }
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo: { type: string, format: date-time, nullable: true }
+    UpdatePriceListLineRequest:
+      type: object
+      properties:
+        concreteUnitPriceJod: { type: string }
+        deliveryUnitPriceJod: { type: string }
+        taxRateBasisPoints: { type: integer }
+        effectiveFrom: { type: string, format: date-time }
+        effectiveTo: { type: string, format: date-time, nullable: true }
+    PriceListWithLines:
+      allOf:
+        - $ref: "#/components/schemas/PriceList"
+        - type: object
+          required: [lines]
+          properties:
+            lines: { type: array, items: { $ref: "#/components/schemas/PriceListLine" } }
+
+    ChargeType:
+      type: object
+      required:
+        [id, companyId, name, calculationMethod, defaultAmountJod, taxRateBasisPoints, isActive,
+         createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        name: { type: string }
+        calculationMethod: { type: string, enum: [flat, per_unit, percentage] }
+        defaultAmountJod: { type: string, nullable: true }
+        taxRateBasisPoints: { type: integer }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateChargeTypeRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        calculationMethod: { type: string, enum: [flat, per_unit, percentage] }
+        defaultAmountJod: { type: string, nullable: true }
+        taxRateBasisPoints: { type: integer }
+        isActive: { type: boolean }
+    UpdateChargeTypeRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        calculationMethod: { type: string, enum: [flat, per_unit, percentage] }
+        defaultAmountJod: { type: string, nullable: true }
+        taxRateBasisPoints: { type: integer }
+        isActive: { type: boolean }
+    ChargeTypeListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ChargeType" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    RawMaterial:
+      type: object
+      required: [id, companyId, branchId, name, code, unit, category, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid, nullable: true }
+        name: { type: string }
+        code: { type: string }
+        unit: { type: string }
+        category: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateRawMaterialRequest:
+      type: object
+      required: [name, code, unit]
+      properties:
+        name: { type: string, minLength: 1 }
+        code: { type: string, minLength: 1, maxLength: 32 }
+        unit: { type: string, minLength: 1 }
+        branchId: { type: string, format: uuid, nullable: true }
+        category: { type: string, nullable: true }
+    UpdateRawMaterialRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        code: { type: string, minLength: 1, maxLength: 32 }
+        unit: { type: string, minLength: 1 }
+        branchId: { type: string, format: uuid, nullable: true }
+        category: { type: string, nullable: true }
+    RawMaterialListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/RawMaterial" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    Vendor:
+      type: object
+      required:
+        [id, companyId, branchId, name, taxNumber, phone, email, address, paymentTermsDays,
+         createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid, nullable: true }
+        name: { type: string }
+        taxNumber: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        paymentTermsDays: { type: integer }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateVendorRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        branchId: { type: string, format: uuid, nullable: true }
+        taxNumber: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        paymentTermsDays: { type: integer }
+    UpdateVendorRequest:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        branchId: { type: string, format: uuid, nullable: true }
+        taxNumber: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        email: { type: string, nullable: true }
+        address: { type: string, nullable: true }
+        paymentTermsDays: { type: integer }
+    VendorListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Vendor" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }

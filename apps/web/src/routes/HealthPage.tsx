@@ -12,12 +12,12 @@ export function HealthPage() {
         <CardTitle>{t.health.title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        {isLoading && <p className="text-slate-500">{t.health.checking}</p>}
+        {isLoading && <p className="text-navy-500">{t.health.checking}</p>}
         {isError && <p className="text-red-600">{t.health.error}</p>}
         {data && data.status === 200 && (
           <>
             <p className="font-medium text-green-700">{t.health.ok}</p>
-            <p className="text-sm text-slate-500">{t.health.lastChecked(data.data.time)}</p>
+            <p className="text-sm text-navy-500">{t.health.lastChecked(data.data.time)}</p>
           </>
         )}
       </CardContent>
