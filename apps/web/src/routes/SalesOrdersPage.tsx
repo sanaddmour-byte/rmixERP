@@ -111,14 +111,14 @@ function SalesOrderDetail({ salesOrderId }: { salesOrderId: string }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-4 text-sm text-navy-600">
+        <div className="flex flex-wrap gap-4 text-sm text-navy-600 dark:text-navy-300">
           <span>Subtotal: {o.subtotalJod} JOD</span>
           <span>Tax: {o.taxJod} JOD</span>
           <span className="font-semibold">Total: {o.totalJod} JOD</span>
         </div>
 
         {o.creditCheckPolicy && (
-          <div className="rounded-md border border-navy-200 bg-navy-50 p-3 text-xs text-navy-700">
+          <div className="rounded-md border border-navy-200 bg-navy-50 dark:border-navy-700 dark:bg-navy-800 p-3 text-xs text-navy-700 dark:text-navy-300">
             Credit check: policy <span className="font-medium">{o.creditCheckPolicy}</span>, projected outstanding{" "}
             {o.creditCheckOutstandingJod} JOD
             {Number(o.creditCheckExceedsByJod) > 0 && (
@@ -171,7 +171,7 @@ function SalesOrderDetail({ salesOrderId }: { salesOrderId: string }) {
 
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-navy-200 text-left text-navy-500">
+            <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
               <th className="py-2 pe-4 font-medium">Product</th>
               <th className="py-2 pe-4 font-medium">Qty (m³)</th>
               <th className="py-2 pe-4 font-medium">Concrete</th>
@@ -185,7 +185,7 @@ function SalesOrderDetail({ salesOrderId }: { salesOrderId: string }) {
           <tbody>
             {o.lines.map((line) => (
               <React.Fragment key={line.id}>
-                <tr className="border-b border-navy-100">
+                <tr className="border-b border-navy-100 dark:border-navy-800">
                   <td className="py-2 pe-4">{productOptions.find((p) => p.id === line.productId)?.name ?? line.productId}</td>
                   <td className="py-2 pe-4">{line.quantityM3}</td>
                   <td className="py-2 pe-4">{line.concreteUnitPriceJod}</td>
@@ -212,7 +212,7 @@ function SalesOrderDetail({ salesOrderId }: { salesOrderId: string }) {
                   </td>
                 </tr>
                 {line.charges.map((charge) => (
-                  <tr key={charge.id} className="border-b border-navy-100 text-xs text-navy-500">
+                  <tr key={charge.id} className="border-b border-navy-100 dark:border-navy-800 text-xs text-navy-500">
                     <td className="py-1 ps-4" colSpan={4}>
                       {chargeTypeOptions.find((c) => c.id === charge.chargeTypeId)?.name ?? charge.chargeTypeId}
                     </td>
@@ -234,13 +234,13 @@ function SalesOrderDetail({ salesOrderId }: { salesOrderId: string }) {
                   </tr>
                 ))}
                 {chargeLineId === line.id && (
-                  <tr className="border-b border-navy-100">
+                  <tr className="border-b border-navy-100 dark:border-navy-800">
                     <td colSpan={8} className="py-2">
                       <form onSubmit={handleAddCharge} className="flex flex-wrap items-end gap-2">
                         <label className="flex flex-col gap-1 text-xs">
                           Charge type
                           <select
-                            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm"
+                            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                             required
                             value={chargeTypeId}
                             onChange={(e) => setChargeTypeId(e.target.value)}
@@ -279,7 +279,7 @@ function SalesOrderDetail({ salesOrderId }: { salesOrderId: string }) {
             <label className="flex flex-col gap-1 text-xs">
               Product
               <select
-                className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+                className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                 required
                 value={productId}
                 onChange={(e) => setProductId(e.target.value)}
@@ -370,7 +370,7 @@ export function SalesOrdersPage() {
               <label className="flex flex-col gap-1 text-xs">
                 Customer
                 <select
-                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                   required
                   value={customerId}
                   onChange={(e) => setCustomerId(e.target.value)}
@@ -388,7 +388,7 @@ export function SalesOrdersPage() {
               <label className="flex flex-col gap-1 text-xs">
                 Branch
                 <select
-                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                   required
                   value={branchId}
                   onChange={(e) => setBranchId(e.target.value)}
@@ -406,7 +406,7 @@ export function SalesOrdersPage() {
               <label className="flex flex-col gap-1 text-xs">
                 Project (optional)
                 <select
-                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                   value={projectId}
                   onChange={(e) => setProjectId(e.target.value)}
                 >
@@ -434,7 +434,7 @@ export function SalesOrdersPage() {
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Sales Orders (Order Book)</CardTitle>
           <select
-            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm"
+            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
             value={status}
             onChange={(e) => {
               setStatus(e.target.value as SalesOrderStatus | "");
@@ -451,7 +451,7 @@ export function SalesOrdersPage() {
         <CardContent className="space-y-4">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-navy-200 text-left text-navy-500">
+              <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
                 <th className="py-2 pe-4 font-medium">Status</th>
                 <th className="py-2 pe-4 font-medium">Customer</th>
                 <th className="py-2 pe-4 font-medium">Total (JOD)</th>
@@ -461,14 +461,14 @@ export function SalesOrdersPage() {
             <tbody>
               {list.isLoading && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-navy-400">
+                  <td colSpan={4} className="py-4 text-center text-navy-400 dark:text-navy-500">
                     Loading…
                   </td>
                 </tr>
               )}
               {!list.isLoading && (body?.items.length ?? 0) === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-navy-400">
+                  <td colSpan={4} className="py-4 text-center text-navy-400 dark:text-navy-500">
                     No records yet.
                   </td>
                 </tr>
@@ -476,7 +476,7 @@ export function SalesOrdersPage() {
               {body?.items.map((row) => (
                 <tr
                   key={row.id}
-                  className="cursor-pointer border-b border-navy-100 hover:bg-navy-50"
+                  className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800"
                   onClick={() => setSelectedId(row.id)}
                 >
                   <td className="py-2 pe-4 capitalize">{row.status}</td>
@@ -495,7 +495,7 @@ export function SalesOrdersPage() {
               ))}
             </tbody>
           </table>
-          <div className="flex items-center justify-between text-sm text-navy-500">
+          <div className="flex items-center justify-between text-sm text-navy-500 dark:text-navy-400">
             <span>
               Page {page} of {totalPages} ({body?.total ?? 0} total)
             </span>

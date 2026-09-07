@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Explicit light/dark toggle (not just OS preference) — driven by a `.dark`
+   class on <html>, set by ThemeContext. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   /* Brand: navy (primary/structure) + orange (accent/interactive). */
   --color-navy-50: #eef2f8;
@@ -24,6 +28,13 @@
   --color-orange-700: #b23c09;
   --color-orange-800: #8f2f0d;
   --color-orange-900: #74280f;
+}
+
+:root {
+  color-scheme: light;
+}
+:root.dark {
+  color-scheme: dark;
 }
 
 body {

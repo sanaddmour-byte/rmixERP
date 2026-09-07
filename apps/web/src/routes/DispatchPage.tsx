@@ -64,10 +64,10 @@ function GanttBoard({ branchId, date }: { branchId: string; date: string }) {
             const actualEnd = item.deliveredAt ? hourOf(item.deliveredAt) : null;
             return (
               <div key={item.id} className="flex items-center gap-2 text-xs">
-                <div className="w-40 shrink-0 truncate text-navy-700">
+                <div className="w-40 shrink-0 truncate text-navy-700 dark:text-navy-300">
                   {item.customerName} {item.qcFlagged && <span className="text-orange-600">(QC failed)</span>}
                 </div>
-                <div className="relative h-6 flex-1 rounded bg-navy-50">
+                <div className="relative h-6 flex-1 rounded bg-navy-50 dark:bg-navy-800">
                   <div
                     className="absolute top-1/2 h-2 w-2 -translate-y-1/2 rounded-full border-2 border-navy-500 bg-white"
                     style={{ left: pct(plannedHour) }}
@@ -144,7 +144,7 @@ function DeliveryOrderDetailPanel({ id, onChanged }: { id: string; onChanged: ()
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
-        <div className="flex flex-wrap gap-4 text-navy-600">
+        <div className="flex flex-wrap gap-4 text-navy-600 dark:text-navy-300">
           <span>Quantity: {o.quantityM3} m³</span>
           <span>Scheduled: {new Date(o.scheduledAt).toLocaleString()}</span>
           {o.qcFlagged && (
@@ -156,12 +156,12 @@ function DeliveryOrderDetailPanel({ id, onChanged }: { id: string; onChanged: ()
 
         {o.status === "planned" && permissions.edit && (
           <div className="space-y-2">
-            <p className="font-semibold text-navy-700">Dispatch</p>
+            <p className="font-semibold text-navy-700 dark:text-navy-300">Dispatch</p>
             <div className="flex flex-wrap items-end gap-2">
               <label className="flex flex-col gap-1 text-xs">
                 Truck
                 <select
-                  className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm"
+                  className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                   value={truckId}
                   onChange={(e) => setTruckId(e.target.value)}
                 >
@@ -176,7 +176,7 @@ function DeliveryOrderDetailPanel({ id, onChanged }: { id: string; onChanged: ()
               <label className="flex flex-col gap-1 text-xs">
                 Driver
                 <select
-                  className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm"
+                  className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                   value={driverId}
                   onChange={(e) => setDriverId(e.target.value)}
                 >
@@ -223,7 +223,7 @@ function DeliveryOrderDetailPanel({ id, onChanged }: { id: string; onChanged: ()
 
         {o.proofOfDelivery && (
           <div className="space-y-2 rounded-md border border-navy-200 p-3">
-            <p className="font-semibold text-navy-700">Proof of Delivery</p>
+            <p className="font-semibold text-navy-700 dark:text-navy-300">Proof of Delivery</p>
             <p>Received: {o.proofOfDelivery.receivedQuantityM3} m³</p>
             <p>Signed by: {o.proofOfDelivery.signedByName}</p>
             {o.proofOfDelivery.notes && <p>Notes: {o.proofOfDelivery.notes}</p>}
@@ -293,7 +293,7 @@ export function DispatchPage() {
           <label className="flex flex-col gap-1 text-xs">
             Branch
             <select
-              className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm"
+              className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
               value={effectiveBranchId}
               onChange={(e) => setBranchId(e.target.value)}
             >
@@ -323,7 +323,7 @@ export function DispatchPage() {
               <label className="flex flex-col gap-1 text-xs">
                 Sales Order
                 <select
-                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                   required
                   value={salesOrderId}
                   onChange={(e) => setSalesOrderId(e.target.value)}
@@ -364,7 +364,7 @@ export function DispatchPage() {
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Delivery Orders</CardTitle>
           <select
-            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm"
+            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
             value={status}
             onChange={(e) => {
               setStatus(e.target.value as DeliveryOrderStatus | "");
@@ -381,7 +381,7 @@ export function DispatchPage() {
         <CardContent className="space-y-4">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-navy-200 text-left text-navy-500">
+              <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
                 <th className="py-2 pe-4 font-medium">Status</th>
                 <th className="py-2 pe-4 font-medium">Quantity m³</th>
                 <th className="py-2 pe-4 font-medium">Scheduled</th>
@@ -391,14 +391,14 @@ export function DispatchPage() {
             <tbody>
               {list.isLoading && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-navy-400">
+                  <td colSpan={4} className="py-4 text-center text-navy-400 dark:text-navy-500">
                     Loading…
                   </td>
                 </tr>
               )}
               {!list.isLoading && (body?.items.length ?? 0) === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-navy-400">
+                  <td colSpan={4} className="py-4 text-center text-navy-400 dark:text-navy-500">
                     No records yet.
                   </td>
                 </tr>
@@ -406,7 +406,7 @@ export function DispatchPage() {
               {body?.items.map((row) => (
                 <tr
                   key={row.id}
-                  className="cursor-pointer border-b border-navy-100 hover:bg-navy-50"
+                  className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800"
                   onClick={() => setSelectedId(row.id)}
                 >
                   <td className="py-2 pe-4 capitalize">{row.status}</td>
@@ -417,7 +417,7 @@ export function DispatchPage() {
               ))}
             </tbody>
           </table>
-          <div className="flex items-center justify-between text-sm text-navy-500">
+          <div className="flex items-center justify-between text-sm text-navy-500 dark:text-navy-400">
             <span>
               Page {page} of {totalPages} ({body?.total ?? 0} total)
             </span>
