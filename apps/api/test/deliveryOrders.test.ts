@@ -260,6 +260,100 @@ describe("delivery orders — dispatch and deliver lifecycle", () => {
   });
 });
 
+describe("delivery orders — document-expiry hard block at dispatch (Phase 10)", () => {
+  it("422s dispatch when the assigned truck has an already-expired registration, with no override", async () => {
+    const customerId = await createCustomer();
+    const salesOrderId = await createConfirmedSalesOrder(customerId, "5");
+    const created = await request(app)
+      .post("/api/delivery-orders")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, salesOrderId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
+    const truckRes = await request(app)
+      .post("/api/trucks")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, plateNumber: `TRKX-${Date.now()}`, registrationExpiresAt: "2020-01-01T00:00:00.000Z" });
+    const driverRes = await request(app)
+      .post("/api/drivers")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, name: `DriverX ${Date.now()}` });
+
+    const res = await request(app)
+      .post(`/api/delivery-orders/${created.body.id}/dispatch`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ truckId: truckRes.body.id, driverId: driverRes.body.id });
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("document_expired");
+    expect(res.body.error.details.expiredDocuments).toEqual(["truck.registration"]);
+
+    const after = await request(app).get(`/api/delivery-orders/${created.body.id}`).set("Authorization", `Bearer ${admin}`);
+    expect(after.body.status).toBe("planned");
+  });
+
+  it("422s dispatch when the assigned driver's license has expired", async () => {
+    const customerId = await createCustomer();
+    const salesOrderId = await createConfirmedSalesOrder(customerId, "5");
+    const created = await request(app)
+      .post("/api/delivery-orders")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, salesOrderId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
+    const { truckId } = await createTruckAndDriver();
+    const driverRes = await request(app)
+      .post("/api/drivers")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, name: `DriverExpired ${Date.now()}`, licenseExpiresAt: "2020-01-01T00:00:00.000Z" });
+
+    const res = await request(app)
+      .post(`/api/delivery-orders/${created.body.id}/dispatch`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ truckId, driverId: driverRes.body.id });
+    expect(res.status).toBe(422);
+    expect(res.body.error.details.expiredDocuments).toEqual(["driver.license"]);
+  });
+
+  it("dispatches an expired-document truck/driver with a mandatory-reason override, and audits it", async () => {
+    const customerId = await createCustomer();
+    const salesOrderId = await createConfirmedSalesOrder(customerId, "5");
+    const created = await request(app)
+      .post("/api/delivery-orders")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, salesOrderId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
+    const truckRes = await request(app)
+      .post("/api/trucks")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, plateNumber: `TRKO-${Date.now()}`, registrationExpiresAt: "2020-01-01T00:00:00.000Z" });
+    const driverRes = await request(app)
+      .post("/api/drivers")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, name: `DriverO ${Date.now()}` });
+
+    const res = await request(app)
+      .post(`/api/delivery-orders/${created.body.id}/dispatch`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ truckId: truckRes.body.id, driverId: driverRes.body.id, override: { reason: "Renewal in progress, dispatcher approved" } });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("dispatched");
+    expect(res.body.documentExpiryOverride).toBe(true);
+    expect(res.body.documentExpiryOverrideReason).toBe("Renewal in progress, dispatcher approved");
+  });
+
+  it("does not block or warn on a truck/driver with no tracked expiry dates", async () => {
+    const customerId = await createCustomer();
+    const salesOrderId = await createConfirmedSalesOrder(customerId, "5");
+    const created = await request(app)
+      .post("/api/delivery-orders")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, salesOrderId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
+    const { truckId, driverId } = await createTruckAndDriver();
+
+    const res = await request(app)
+      .post(`/api/delivery-orders/${created.body.id}/dispatch`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ truckId, driverId });
+    expect(res.status).toBe(200);
+    expect(res.body.documentExpiryOverride).toBe(false);
+  });
+});
+
 describe("QC flag propagation onto deliveries (DOMAIN.md Invariant 6)", () => {
   it("surfaces qcFlagged/qcFlagReason from the batch a delivery was drawn from", async () => {
     const mixDesignRes = await request(app)

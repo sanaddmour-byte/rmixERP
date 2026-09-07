@@ -30,6 +30,8 @@ import { clearanceRouter } from "./routes/clearance";
 import { receivablesRouter } from "./routes/receivables";
 import { procurementRouter } from "./routes/procurement";
 import { glRouter } from "./routes/gl";
+import { fleetOpsRouter } from "./routes/fleetOps";
+import { approvalsRouter } from "./routes/approvals";
 
 export function createApp() {
   const app = express();
@@ -66,6 +68,8 @@ export function createApp() {
   app.use("/api", receivablesRouter);
   app.use("/api", procurementRouter);
   app.use("/api", glRouter);
+  app.use("/api", fleetOpsRouter);
+  app.use("/api", approvalsRouter);
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: { message: "Not found", code: "not_found" } });
