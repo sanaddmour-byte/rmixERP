@@ -12,7 +12,8 @@ import {
   withTenant,
   type Tx,
 } from "@rmixerp/db";
-import { evaluateCubeTest } from "@rmixerp/core";
+import { evaluateCubeTest, NOTIFICATION_TYPE_REQUIRED_PERMISSION } from "@rmixerp/core";
+import { pushForNotification } from "../lib/pushNotifications";
 import {
   RecordCubeTestSetBody,
   RecordFreshTestBody,
@@ -331,6 +332,16 @@ qcRouter.post("/batches/:batchId/cube-test-sets", requireAuth, requirePermission
         action: "qc_flagged",
         after: notif,
       });
+
+      if (notif) {
+        await pushForNotification(tx, {
+          companyId: req.auth!.companyId,
+          requiredPermission: NOTIFICATION_TYPE_REQUIRED_PERMISSION.qc_cube_test_failed ?? null,
+          title: "QC Alert",
+          body: notif.message,
+          data: { type: notif.type, entityType: notif.entityType, entityId: notif.entityId },
+        });
+      }
     }
 
     return { kind: "ok" as const, set: newSet, specimens: specimenRows };
