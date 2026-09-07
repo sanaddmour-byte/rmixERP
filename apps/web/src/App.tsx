@@ -24,6 +24,7 @@ import { QCPage } from "./routes/QCPage";
 import { TrucksPage } from "./routes/TrucksPage";
 import { DriversPage } from "./routes/DriversPage";
 import { DispatchPage } from "./routes/DispatchPage";
+import { InvoicesPage } from "./routes/InvoicesPage";
 import { clearSession, getAccessToken } from "./lib/session";
 import { useCurrentUser } from "./lib/useCurrentUser";
 
@@ -48,6 +49,7 @@ const MASTER_DATA_LINKS: { href: string; labelKey: keyof Translations["nav"] }[]
   { href: "/trucks", labelKey: "trucks" },
   { href: "/drivers", labelKey: "drivers" },
   { href: "/dispatch", labelKey: "dispatch" },
+  { href: "/invoices", labelKey: "invoices" },
 ];
 
 function Nav() {
@@ -139,6 +141,7 @@ export function App() {
           <Route path="/trucks" component={TrucksPage} />
           <Route path="/drivers" component={DriversPage} />
           <Route path="/dispatch" component={DispatchPage} />
+          <Route path="/invoices" component={InvoicesPage} />
           <Route path="/" component={HealthPage} />
         </Switch>
       </main>
