@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Link, useSearchParams } from "wouter";
 import {
   useCreateDeliveryOrder,
   useDispatchDeliveryOrder,
@@ -236,12 +237,14 @@ function DeliveryOrderDetailPanel({ id, onChanged }: { id: string; onChanged: ()
 }
 
 export function DispatchPage() {
+  const [searchParams] = useSearchParams();
   const permissions = useModulePermissions("deliveryOrders");
   const [page, setPage] = React.useState(1);
   const [branchId, setBranchId] = React.useState("");
   const [date, setDate] = React.useState(todayIso());
   const [status, setStatus] = React.useState<DeliveryOrderStatus | "">("");
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [selectedId, setSelectedId] = React.useState<string | null>(() => searchParams.get("id"));
+  const [salesOrderFilterId] = React.useState(() => searchParams.get("salesOrderId") ?? "");
 
   const branches = useListBranches({ page: 1, pageSize: 100 });
   const branchOptions =
@@ -249,7 +252,9 @@ export function DispatchPage() {
   // Default to the first branch once loaded, without a setState-in-effect
   // cascade — the select is controlled by this derived value, and picking
   // a different branch still writes through to `branchId` state normally.
-  const effectiveBranchId = branchId || (branchOptions[0]?.id ?? "");
+  // A sales-order deep link skips the branch default so a matching delivery
+  // in any branch is found, rather than being silently filtered out.
+  const effectiveBranchId = salesOrderFilterId ? "" : branchId || (branchOptions[0]?.id ?? "");
 
   const salesOrders = useListSalesOrders({ page: 1, pageSize: 100, status: "confirmed" });
   const salesOrderOptions = salesOrders.data?.status === 200 ? salesOrders.data.data.items : [];
@@ -267,6 +272,7 @@ export function DispatchPage() {
     pageSize: 20,
     ...(effectiveBranchId && { branchId: effectiveBranchId }),
     ...(status && { status }),
+    ...(salesOrderFilterId && { salesOrderId: salesOrderFilterId }),
   });
   const create = useCreateDeliveryOrder(refetchOnSuccess(list));
   const body = list.data?.status === 200 ? list.data.data : undefined;
@@ -285,6 +291,14 @@ export function DispatchPage() {
 
   return (
     <div className="space-y-4">
+      {salesOrderFilterId && (
+        <p className="text-xs text-navy-500 dark:text-navy-400">
+          Filtered to one sales order.{" "}
+          <Link href="/dispatch" className="text-orange-600 hover:underline dark:text-orange-400">
+            Clear
+          </Link>
+        </p>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Dispatch Board</CardTitle>

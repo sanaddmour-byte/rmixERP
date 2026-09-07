@@ -46,7 +46,12 @@ function adjustmentToApi(row: StockAdjustmentRow): StockAdjustment {
 }
 
 /** Finds or lazily creates (at zero) the stock balance row for a branch + raw material. */
-async function findOrCreateBalance(tx: Tx, companyId: string, branchId: string, rawMaterialId: string): Promise<StockBalanceRow> {
+export async function findOrCreateBalance(
+  tx: Tx,
+  companyId: string,
+  branchId: string,
+  rawMaterialId: string,
+): Promise<StockBalanceRow> {
   const [existing] = await tx
     .select()
     .from(stockBalance)

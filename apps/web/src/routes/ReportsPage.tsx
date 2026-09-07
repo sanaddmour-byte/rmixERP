@@ -42,8 +42,9 @@ export function ReportsPage() {
   const receivablesReports = useModulePermissions("receivablesReports");
   const qc = useModulePermissions("qc");
   const productionOrders = useModulePermissions("productionOrders");
+  const glReports = useModulePermissions("glReports");
 
-  const hasAny = receivablesReports.view || qc.view || productionOrders.view;
+  const hasAny = receivablesReports.view || qc.view || productionOrders.view || glReports.view;
 
   return (
     <div className="space-y-8">
@@ -86,6 +87,21 @@ export function ReportsPage() {
               icon="shield"
               title={t.reportsHub.creditOverridesTitle}
               description={t.reportsHub.creditOverridesDesc}
+              openLabel={t.reportsHub.openReport}
+            />
+          </div>
+        </section>
+      )}
+
+      {glReports.view && (
+        <section>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-navy-500">{t.reportsHub.financeSection}</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <ReportTile
+              href="/gl-reports"
+              icon="barChart"
+              title={t.nav.glReports}
+              description={t.reportsHub.glReportsDesc}
               openLabel={t.reportsHub.openReport}
             />
           </div>

@@ -174,7 +174,7 @@ export async function allocateDocumentNumber(
   tx: Tx,
   companyId: string,
   branchId: string,
-  docType: "invoice" | "credit_note" | "debit_note" | "RCP" | "TRF" | "PDC",
+  docType: "invoice" | "credit_note" | "debit_note" | "RCP" | "TRF" | "PDC" | "PR" | "PO" | "GRN" | "BILL" | "PMT",
   displayPrefix: string,
 ): Promise<string> {
   const now = new Date();

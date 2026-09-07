@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Link, useSearchParams } from "wouter";
 import {
   useAcceptQuotation,
   useConvertQuotation,
@@ -282,9 +283,11 @@ function QuotationDetail({ quotationId, onConverted }: { quotationId: string; on
 }
 
 export function QuotationsPage() {
+  const [searchParams] = useSearchParams();
   const [page, setPage] = React.useState(1);
   const [status, setStatus] = React.useState<QuotationStatus | "">("");
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [selectedId, setSelectedId] = React.useState<string | null>(() => searchParams.get("id"));
+  const [customerFilterId] = React.useState(() => searchParams.get("customerId") ?? "");
   const permissions = useModulePermissions("quotations");
 
   const branches = useListBranches({ page: 1, pageSize: 100 });
@@ -303,7 +306,12 @@ export function QuotationsPage() {
   const [validUntil, setValidUntil] = React.useState("");
   const [notes, setNotes] = React.useState("");
 
-  const list = useListQuotations({ page, pageSize: 20, ...(status && { status }) });
+  const list = useListQuotations({
+    page,
+    pageSize: 20,
+    ...(status && { status }),
+    ...(customerFilterId && { customerId: customerFilterId }),
+  });
   const create = useCreateQuotation(refetchOnSuccess(list));
 
   const body = list.data?.status === 200 ? list.data.data : undefined;
@@ -410,6 +418,14 @@ export function QuotationsPage() {
         </Card>
       )}
 
+      {customerFilterId && (
+        <p className="text-xs text-navy-500 dark:text-navy-400">
+          Filtered to one customer.{" "}
+          <Link href="/quotations" className="text-orange-600 hover:underline dark:text-orange-400">
+            Clear
+          </Link>
+        </p>
+      )}
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Quotations</CardTitle>
@@ -462,7 +478,15 @@ export function QuotationsPage() {
                   onClick={() => setSelectedId(row.id)}
                 >
                   <td className="py-2 pe-4 capitalize">{row.status}</td>
-                  <td className="py-2 pe-4">{customerOptions.find((c) => c.id === row.customerId)?.name ?? row.customerId}</td>
+                  <td className="py-2 pe-4">
+                    <Link
+                      href={`/receivables-reports?customerId=${row.customerId}`}
+                      className="hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {customerOptions.find((c) => c.id === row.customerId)?.name ?? row.customerId}
+                    </Link>
+                  </td>
                   <td className="py-2 pe-4">{row.totalJod}</td>
                   <td className="py-2 pe-4">{row.validUntil ? new Date(row.validUntil).toLocaleDateString() : "—"}</td>
                 </tr>

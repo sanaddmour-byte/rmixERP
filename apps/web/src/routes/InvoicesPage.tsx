@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Link, useSearchParams } from "wouter";
 import {
   useCreateCreditNote,
   useCreateDebitNote,
@@ -97,7 +98,7 @@ function GenerateInvoicePanel({ onGenerated }: { onGenerated: (invoiceId: string
   );
 }
 
-function InvoiceDetailPanel({ id }: { id: string }) {
+function InvoiceDetailPanel({ id, onSelect }: { id: string; onSelect: (id: string) => void }) {
   const permissions = useModulePermissions("invoices");
   const clearancePermissions = useModulePermissions("clearance");
   const detail = useGetInvoice(id);
@@ -137,7 +138,18 @@ function InvoiceDetailPanel({ id }: { id: string }) {
         )}
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
-        {inv.relatedInvoiceId && <p className="text-navy-500">Paired with invoice {inv.relatedInvoiceId.slice(0, 8)}…</p>}
+        {inv.relatedInvoiceId && (
+          <p className="text-navy-500">
+            Paired with invoice{" "}
+            <button
+              type="button"
+              onClick={() => onSelect(inv.relatedInvoiceId!)}
+              className="text-orange-600 hover:underline dark:text-orange-400"
+            >
+              {inv.relatedInvoiceId.slice(0, 8)}…
+            </button>
+          </p>
+        )}
         <div className="rounded-md border border-navy-200 bg-navy-50 dark:border-navy-700 dark:bg-navy-800 p-3 text-xs text-navy-600 dark:text-navy-300">
           <span className="font-semibold capitalize">Clearance: {inv.clearanceStatus.replace(/_/g, " ")}</span>
           {inv.clearanceIcv !== null && <span className="ms-3">ICV {inv.clearanceIcv}</span>}
@@ -232,16 +244,23 @@ function InvoiceDetailPanel({ id }: { id: string }) {
 }
 
 export function InvoicesPage() {
+  const [searchParams] = useSearchParams();
   const [page, setPage] = React.useState(1);
   const [status, setStatus] = React.useState<InvoiceStatus | "">("");
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [selectedId, setSelectedId] = React.useState<string | null>(() => searchParams.get("id"));
+  const [customerFilterId] = React.useState(() => searchParams.get("customerId") ?? "");
 
   const customers = useListCustomers({ page: 1, pageSize: 100 });
   const customerOptions =
     customers.data?.status === 200 && typeof customers.data.data !== "string" ? customers.data.data.items : [];
   const customerById = new Map(customerOptions.map((c) => [c.id, c.name]));
 
-  const list = useListInvoices({ page, pageSize: 20, ...(status && { status }) });
+  const list = useListInvoices({
+    page,
+    pageSize: 20,
+    ...(status && { status }),
+    ...(customerFilterId && { customerId: customerFilterId }),
+  });
   const body = list.data?.status === 200 ? list.data.data : undefined;
   const totalPages = Math.max(1, Math.ceil((body?.total ?? 0) / 20));
 
@@ -254,6 +273,14 @@ export function InvoicesPage() {
         }}
       />
 
+      {customerFilterId && (
+        <p className="text-xs text-navy-500 dark:text-navy-400">
+          Filtered to one customer.{" "}
+          <Link href="/invoices" className="text-orange-600 hover:underline dark:text-orange-400">
+            Clear
+          </Link>
+        </p>
+      )}
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Invoices</CardTitle>
@@ -309,7 +336,15 @@ export function InvoicesPage() {
                   onClick={() => setSelectedId(row.id)}
                 >
                   <td className="py-2 pe-4">{row.invoiceNumber}</td>
-                  <td className="py-2 pe-4">{customerById.get(row.customerId) ?? row.customerId}</td>
+                  <td className="py-2 pe-4">
+                    <Link
+                      href={`/receivables-reports?customerId=${row.customerId}`}
+                      className="hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {customerById.get(row.customerId) ?? row.customerId}
+                    </Link>
+                  </td>
                   <td className="py-2 pe-4 capitalize">{row.status.replace(/_/g, " ")}</td>
                   <td className="py-2 pe-4 capitalize">{row.clearanceStatus.replace(/_/g, " ")}</td>
                   <td className="py-2 pe-4">{row.totalJod}</td>
@@ -334,7 +369,7 @@ export function InvoicesPage() {
         </CardContent>
       </Card>
 
-      {selectedId && <InvoiceDetailPanel id={selectedId} />}
+      {selectedId && <InvoiceDetailPanel id={selectedId} onSelect={setSelectedId} />}
     </div>
   );
 }

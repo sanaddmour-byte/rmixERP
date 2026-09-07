@@ -59,6 +59,10 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/raw-materials", labelKey: "rawMaterials", module: "rawMaterials", icon: "layers" },
       { href: "/vendors", labelKey: "vendors", module: "vendors", icon: "store" },
+      { href: "/purchase-requests", labelKey: "purchaseRequests", module: "purchaseRequests", icon: "fileText" },
+      { href: "/purchase-orders", labelKey: "purchaseOrders", module: "purchaseOrders", icon: "clipboard" },
+      { href: "/goods-receipts", labelKey: "goodsReceipts", module: "goodsReceipts", icon: "box" },
+      { href: "/vendor-bills", labelKey: "vendorBills", module: "vendorBills", icon: "receipt" },
     ],
   },
   {
@@ -70,6 +74,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/clearance-queue", labelKey: "clearanceQueue", module: "clearance", icon: "shield" },
       { href: "/collections", labelKey: "collections", module: "collections", icon: "creditCard" },
       { href: "/post-dated-cheques", labelKey: "postDatedCheques", module: "postDatedCheques", icon: "fileClock" },
+      { href: "/payments", labelKey: "payments", module: "payments", icon: "creditCard" },
+      { href: "/chart-of-accounts", labelKey: "chartOfAccounts", module: "glAccounts", icon: "database" },
+      { href: "/gl-reports", labelKey: "glReports", module: "glReports", icon: "barChart" },
     ],
   },
   {
