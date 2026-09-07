@@ -4,10 +4,12 @@ import { db } from "../src/db";
 import { signAccessToken } from "../src/auth/accessToken";
 import { config } from "../src/config";
 
+const seedAdminEmail = process.env.TEST_SEED_ADMIN_EMAIL ?? "admin@test.local";
+
 /** A bearer token for the seeded admin (all permissions). Used across master-data tests. */
 export async function adminToken(): Promise<string> {
   return withTenant(db, config.companyId, async (tx) => {
-    const [user] = await tx.select().from(appUser).where(eq(appUser.email, "admin@test.local"));
+    const [user] = await tx.select().from(appUser).where(eq(appUser.email, seedAdminEmail));
     if (!user) throw new Error("seeded admin not found — did you run db:seed against rmixerp_test?");
 
     const perms = await tx.select({ module: permission.module, action: permission.action }).from(permission);
