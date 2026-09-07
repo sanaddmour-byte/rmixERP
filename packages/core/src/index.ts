@@ -19,3 +19,4 @@ export * from "./journalEntry";
 export * from "./glDefaultAccounts";
 export * from "./paymentAllocation";
 export * from "./documentExpiry";
+export * from "./notificationRouting";

@@ -5306,12 +5306,17 @@ components:
 
     Notification:
       type: object
-      required: [id, companyId, branchId, type, entityType, entityId, message, createdAt, readAt, readBy]
+      required: [id, companyId, branchId, userId, type, entityType, entityId, message, createdAt, readAt, readBy]
       properties:
         id: { type: string, format: uuid }
         companyId: { type: string, format: uuid }
         branchId: { type: string, format: uuid, nullable: true }
-        type: { type: string }
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Set only for an individually-targeted notification; null means it's role-based (visible to anyone whose permissions cover its type).
+        type: { type: string, enum: [qc_cube_test_failed, purchase_request_submitted, purchase_order_submitted] }
         entityType: { type: string }
         entityId: { type: string, format: uuid }
         message: { type: string }
