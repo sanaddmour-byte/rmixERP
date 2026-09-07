@@ -34,6 +34,10 @@ const PRODUCTION_LINKS = [
 const DISPATCH_LINKS = [
   { module: "deliveryOrders", href: "/dispatch", labelKey: "dispatch" },
   { module: "deliveryOrders", href: "/deliveries", labelKey: "myDeliveries" },
+  // The sync queue only ever holds proof-of-delivery submissions today
+  // (syncQueue.ts), so it's gated the same as the delivery screens above
+  // rather than getting its own permission module.
+  { module: "deliveryOrders", href: "/sync-queue", labelKey: "syncQueue" },
 ] as const;
 
 // Collectors' field screens (DOMAIN.md/PLAN.md's mobile-critical Phase 8
@@ -55,13 +59,28 @@ const PROCUREMENT_LINKS = [
   { module: "purchaseOrders", href: "/purchase-orders", labelKey: "purchaseOrders" },
 ] as const;
 
+// Phase 10's cross-cutting screens. Approvals is gated on purchaseOrders
+// view as a reasonable proxy for "this user approves things" — the screen
+// itself scopes its actual contents to the caller's real per-module
+// :approve permissions, which a single link-level gate can't express.
+// Fleet Alerts is read-only on mobile (editing trucks/drivers stays
+// web-only, matching every other master-data screen).
+const OPS_LINKS = [
+  { module: "purchaseOrders", href: "/approvals", labelKey: "approvalsInbox" },
+  { module: "trucks", href: "/fleet-alerts", labelKey: "fleetAlerts" },
+  // Same proxy-gate trade-off as Approvals above — qc:view picked as the
+  // broadest-held of the three notification-producing modules.
+  { module: "qc", href: "/notifications", labelKey: "notifications" },
+] as const;
+
 type LinkModule =
   | (typeof MASTER_DATA_LINKS)[number]["module"]
   | (typeof SALES_LINKS)[number]["module"]
   | (typeof PRODUCTION_LINKS)[number]["module"]
   | (typeof DISPATCH_LINKS)[number]["module"]
   | (typeof RECEIVABLES_LINKS)[number]["module"]
-  | (typeof PROCUREMENT_LINKS)[number]["module"];
+  | (typeof PROCUREMENT_LINKS)[number]["module"]
+  | (typeof OPS_LINKS)[number]["module"];
 
 function MasterDataLink({
   module,
@@ -154,6 +173,12 @@ export default function HealthScreen() {
 
           <View>
             {PROCUREMENT_LINKS.map((link) => (
+              <MasterDataLink key={link.href} module={link.module} href={link.href} labelKey={link.labelKey} />
+            ))}
+          </View>
+
+          <View>
+            {OPS_LINKS.map((link) => (
               <MasterDataLink key={link.href} module={link.module} href={link.href} labelKey={link.labelKey} />
             ))}
           </View>

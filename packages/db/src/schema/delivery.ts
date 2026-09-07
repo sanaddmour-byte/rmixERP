@@ -52,6 +52,11 @@ export const deliveryOrder = pgTable(
     creditOverride: boolean("credit_override").notNull().default(false),
     creditOverrideReason: varchar("credit_override_reason", { length: 500 }),
     creditOverrideBy: uuid("credit_override_by"),
+    // Document-expiry outcome at dispatch (Phase 10), mirroring the credit-check
+    // columns above rather than inventing a second override shape.
+    documentExpiryOverride: boolean("document_expiry_override").notNull().default(false),
+    documentExpiryOverrideReason: varchar("document_expiry_override_reason", { length: 500 }),
+    documentExpiryOverrideBy: uuid("document_expiry_override_by"),
     notes: varchar("notes", { length: 2000 }),
     ...auditColumns(),
   },

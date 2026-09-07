@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { useLogin } from "@rmixerp/contract";
 import { useLanguage } from "../src/i18n/LanguageContext";
 import { setSession } from "../src/lib/session";
+import { registerPushToken } from "../src/lib/registerPushToken";
 import { colors } from "../src/theme";
 
 export default function LoginScreen() {
@@ -23,6 +24,7 @@ export default function LoginScreen() {
           if (result.status === 200) {
             void setSession(result.data.accessToken, result.data.refreshToken).then(() => {
               router.replace("/");
+              void registerPushToken();
             });
             return;
           }

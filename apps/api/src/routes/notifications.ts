@@ -1,6 +1,7 @@
 import { Router } from "express";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { notification, withTenant } from "@rmixerp/db";
+import { NOTIFICATION_TYPES, NOTIFICATION_TYPE_REQUIRED_PERMISSION, type NotificationType } from "@rmixerp/core";
 import type { Notification } from "@rmixerp/contract";
 import { db } from "../db";
 import { requireAuth } from "../middleware/requireAuth";
@@ -17,6 +18,7 @@ function toApi(row: NotificationRow): Notification {
     id: row.id,
     companyId: row.companyId,
     branchId: row.branchId,
+    userId: row.userId,
     type: row.type,
     entityType: row.entityType,
     entityId: row.entityId,
@@ -27,18 +29,32 @@ function toApi(row: NotificationRow): Notification {
   };
 }
 
+/** Every type this caller's permissions cover, per `NOTIFICATION_TYPE_REQUIRED_PERMISSION` (a type with no entry there is visible to anyone). */
+function visibleTypesFor(permissions: string[]): NotificationType[] {
+  return NOTIFICATION_TYPES.filter((type) => {
+    const required = NOTIFICATION_TYPE_REQUIRED_PERMISSION[type];
+    return !required || permissions.includes(required);
+  });
+}
+
 /**
- * Broadcast, not per-user targeted (see `packages/db`'s `notification.ts`
- * doc comment) — every authenticated user in the company can list and
- * mark-read, gated only by tenancy, not a `module:action` permission.
- * Phase 10 owns the real per-user inbox.
+ * Real per-user inbox (Phase 10, closing Phase 4's documented interim):
+ * visible only to a user whose permissions actually cover the
+ * notification's type (role-based — every current producer is company/
+ * branch-wide, `userId` null), plus any notification individually
+ * targeted at this user once a producer starts setting it.
  */
 notificationsRouter.get("/notifications", requireAuth, async (req, res) => {
   const pagination = parsePagination(req);
   const unreadOnly = req.query.unreadOnly === "true";
+  const visibleTypes = visibleTypesFor(req.auth!.permissions ?? []);
 
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
-    const where = unreadOnly ? isNull(notification.readAt) : undefined;
+    const where = and(
+      inArray(notification.type, visibleTypes),
+      or(isNull(notification.userId), eq(notification.userId, req.auth!.userId)),
+      unreadOnly ? isNull(notification.readAt) : undefined,
+    );
     const [rows, countRows] = await Promise.all([
       tx
         .select()
