@@ -5,3 +5,4 @@ export * from "./salesStateMachine";
 export * from "./creditCheck";
 export * from "./productionStateMachine";
 export * from "./inventory";
+export * from "./qc";

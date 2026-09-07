@@ -24,6 +24,8 @@ export interface Translations {
     mixDesigns: string;
     inventory: string;
     productionOrders: string;
+    qc: string;
+    notifications: string;
   };
   login: {
     title: string;
@@ -84,6 +86,8 @@ export const translations: Record<Locale, Translations> = {
       mixDesigns: "Mix Designs",
       inventory: "Inventory",
       productionOrders: "Production Orders",
+      qc: "QC",
+      notifications: "Notifications",
     },
     login: {
       title: "Sign in",
@@ -142,6 +146,8 @@ export const translations: Record<Locale, Translations> = {
       mixDesigns: "تصاميم الخلطات",
       inventory: "المخزون",
       productionOrders: "أوامر الإنتاج",
+      qc: "مراقبة الجودة",
+      notifications: "الإشعارات",
     },
     login: {
       title: "تسجيل الدخول",

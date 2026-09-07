@@ -62,6 +62,12 @@ export const batchRecord = pgTable(
     // not verified against real batching practice.
     moistureAdjustmentBasisPoints: integer("moisture_adjustment_basis_points").notNull().default(0),
     batchedAt: timestamp("batched_at", { withTimezone: true }).notNull().defaultNow(),
+    // Set by a failed 28-day (design-age) cube test result (DOMAIN.md Invariant
+    // 6). "Flags every delivery drawn from this batch" — until Phase 5's
+    // DeliveryOrder exists, the flag lives here at the batch level; Phase 5
+    // will propagate it onto deliveries that draw from a flagged batch.
+    qcFlagged: boolean("qc_flagged").notNull().default(false),
+    qcFlagReason: varchar("qc_flag_reason", { length: 500 }),
     ...auditColumns(),
   },
   () => [tenantIsolationPolicy()],

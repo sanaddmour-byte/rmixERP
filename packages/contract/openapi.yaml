@@ -34,6 +34,8 @@ tags:
   - name: mixDesigns
   - name: inventory
   - name: productionOrders
+  - name: qc
+  - name: notifications
 
 paths:
   /health:
@@ -2167,6 +2169,182 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /batches/{batchId}/fresh-tests:
+    parameters:
+      - name: batchId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: listFreshTests
+      tags: [qc]
+      summary: List fresh-concrete tests recorded for a batch.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/QCFreshTest" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      operationId: recordFreshTest
+      tags: [qc]
+      summary: Record a fresh-concrete test (slump/temperature/air content) for a batch. Data capture only — no pass/fail (DOMAIN.md Invariant 6 is cube-test-only).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateFreshTestRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QCFreshTest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /batches/{batchId}/cube-test-sets:
+    parameters:
+      - name: batchId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: listCubeTestSets
+      tags: [qc]
+      summary: List cube test sets cast from a batch.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/QCCubeTestSet" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      operationId: recordCubeTestSet
+      tags: [qc]
+      summary: >
+        Record a set of cube-specimen crush results cast from a batch.
+        Average strength and pass/fail are computed server-side
+        (`packages/core`'s `evaluateCubeTest`) — pass/fail is only
+        rendered when `ageDays` equals the set's design age (28 days by
+        default), since a product's characteristic strength is a design-age
+        figure; earlier ages are recorded but return `pass: null`. A
+        failing result at the design age raises a Notification and flags
+        every batch record it came from (DOMAIN.md Invariant 6) — the flag
+        will propagate onto deliveries drawn from that batch once Phase
+        5's DeliveryOrder exists.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCubeTestSetRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QCCubeTestSet" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /qc/cube-test-sets:
+    get:
+      operationId: listAllCubeTestSets
+      tags: [qc]
+      summary: >
+        Company-wide cube test sets with batch/mix-design/product
+        traceability context, for the QC dashboard and traceability
+        report (cube result -> batch -> mix design). Delivery-order
+        traceability is deferred to Phase 5.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: result
+          in: query
+          description: Filter by verdict — pass, fail, or pending (not yet at design age).
+          schema: { type: string, enum: [pass, fail, pending] }
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CubeTestTraceabilityListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /qc/cube-test-sets/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getCubeTestTraceability
+      tags: [qc]
+      summary: One cube test set's full traceability detail (specimens, batch, mix design, product).
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CubeTestTraceabilityDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /notifications:
+    get:
+      operationId: listNotifications
+      tags: [notifications]
+      summary: List this company's notifications (broadcast — see Notification schema doc comment).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: unreadOnly
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NotificationListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /notifications/{id}/read:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: markNotificationRead
+      tags: [notifications]
+      summary: Mark a notification as read by the current user.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Notification" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -3138,7 +3316,7 @@ components:
       type: object
       required:
         [id, companyId, productionOrderId, batchNumber, targetQuantityM3, actualQuantityM3,
-         moistureAdjustmentBasisPoints, batchedAt, consumptions, createdAt]
+         moistureAdjustmentBasisPoints, batchedAt, consumptions, qcFlagged, qcFlagReason, createdAt]
       properties:
         id: { type: string, format: uuid }
         companyId: { type: string, format: uuid }
@@ -3149,6 +3327,10 @@ components:
         moistureAdjustmentBasisPoints: { type: integer }
         batchedAt: { type: string, format: date-time }
         consumptions: { type: array, items: { $ref: "#/components/schemas/MaterialConsumption" } }
+        qcFlagged:
+          type: boolean
+          description: Set by a failed design-age cube test result (DOMAIN.md Invariant 6).
+        qcFlagReason: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
     CreateBatchRequest:
       type: object
@@ -3197,3 +3379,130 @@ components:
       properties:
         netProducedM3: { type: string }
         deliveryVarianceM3: { type: string, nullable: true }
+
+    QCFreshTest:
+      type: object
+      required:
+        [id, companyId, batchRecordId, slumpMm, concreteTemperatureC, ambientTemperatureC, airContentPercent,
+         testedAt, notes, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        batchRecordId: { type: string, format: uuid }
+        slumpMm: { type: string }
+        concreteTemperatureC: { type: string, nullable: true }
+        ambientTemperatureC: { type: string, nullable: true }
+        airContentPercent: { type: string, nullable: true }
+        testedAt: { type: string, format: date-time }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+    CreateFreshTestRequest:
+      type: object
+      required: [slumpMm]
+      properties:
+        slumpMm: { type: string }
+        concreteTemperatureC: { type: string, nullable: true }
+        ambientTemperatureC: { type: string, nullable: true }
+        airContentPercent: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+
+    QCCubeTestSpecimen:
+      type: object
+      required: [id, companyId, cubeTestSetId, specimenNumber, strengthMpa]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        cubeTestSetId: { type: string, format: uuid }
+        specimenNumber: { type: integer }
+        strengthMpa: { type: string }
+    QCCubeTestSet:
+      type: object
+      required:
+        [id, companyId, batchRecordId, setNumber, ageDays, designAgeDays, castAt, testedAt, averageStrengthMpa,
+         pass, notes, specimens, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        batchRecordId: { type: string, format: uuid }
+        setNumber: { type: integer }
+        ageDays: { type: integer }
+        designAgeDays: { type: integer }
+        castAt: { type: string, format: date-time }
+        testedAt: { type: string, format: date-time }
+        averageStrengthMpa: { type: string }
+        pass:
+          type: boolean
+          nullable: true
+          description: null when ageDays !== designAgeDays — recorded but not yet evaluated.
+        notes: { type: string, nullable: true }
+        specimens: { type: array, items: { $ref: "#/components/schemas/QCCubeTestSpecimen" } }
+        createdAt: { type: string, format: date-time }
+    CreateCubeTestSetRequest:
+      type: object
+      required: [ageDays, specimenStrengthsMpa]
+      properties:
+        ageDays: { type: integer, minimum: 1 }
+        designAgeDays: { type: integer, minimum: 1 }
+        castAt: { type: string, format: date-time }
+        specimenStrengthsMpa: { type: array, minItems: 1, items: { type: string } }
+        notes: { type: string, nullable: true }
+
+    CubeTestTraceabilityItem:
+      type: object
+      required:
+        [id, batchRecordId, batchNumber, productionOrderId, mixDesignId, mixDesignName, productId, branchId,
+         ageDays, designAgeDays, averageStrengthMpa, pass, castAt, testedAt]
+      properties:
+        id: { type: string, format: uuid }
+        batchRecordId: { type: string, format: uuid }
+        batchNumber: { type: integer }
+        productionOrderId: { type: string, format: uuid }
+        mixDesignId: { type: string, format: uuid }
+        mixDesignName: { type: string }
+        productId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        ageDays: { type: integer }
+        designAgeDays: { type: integer }
+        averageStrengthMpa: { type: string }
+        pass: { type: boolean, nullable: true }
+        castAt: { type: string, format: date-time }
+        testedAt: { type: string, format: date-time }
+    CubeTestTraceabilityListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/CubeTestTraceabilityItem" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    CubeTestTraceabilityDetail:
+      allOf:
+        - $ref: "#/components/schemas/CubeTestTraceabilityItem"
+        - type: object
+          required: [notes, specimens]
+          properties:
+            notes: { type: string, nullable: true }
+            specimens: { type: array, items: { $ref: "#/components/schemas/QCCubeTestSpecimen" } }
+
+    Notification:
+      type: object
+      required: [id, companyId, branchId, type, entityType, entityId, message, createdAt, readAt, readBy]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid, nullable: true }
+        type: { type: string }
+        entityType: { type: string }
+        entityId: { type: string, format: uuid }
+        message: { type: string }
+        createdAt: { type: string, format: date-time }
+        readAt: { type: string, format: date-time, nullable: true }
+        readBy: { type: string, format: uuid, nullable: true }
+    NotificationListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Notification" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }

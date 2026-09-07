@@ -4,14 +4,123 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import {
   useCompleteProductionOrder,
   useGetProductionOrder,
+  useListCubeTestSets,
+  useListFreshTests,
   useListRawMaterials,
   useRecordBatch,
+  useRecordCubeTestSet,
+  useRecordFreshTest,
   useRecordReturnedConcrete,
 } from "@rmixerp/contract";
 import { Button } from "../../src/components/Button";
 import { Input } from "../../src/components/Input";
+import { useModulePermissions } from "../../src/lib/usePermissions";
 import { useRequireAuth } from "../../src/lib/useRequireAuth";
 import { colors } from "../../src/theme";
+
+function BatchQCSection({ batchId, onCubeTestRecorded }: { batchId: string; onCubeTestRecorded: () => void }) {
+  const permissions = useModulePermissions("qc");
+  const freshTests = useListFreshTests(batchId);
+  const cubeTestSets = useListCubeTestSets(batchId);
+  const recordFreshTest = useRecordFreshTest();
+  const recordCubeTestSet = useRecordCubeTestSet();
+
+  const [slumpMm, setSlumpMm] = React.useState("");
+  const [ageDays, setAgeDays] = React.useState("28");
+  const [specimenStrengthsMpa, setSpecimenStrengthsMpa] = React.useState("");
+
+  const freshList = freshTests.data?.status === 200 ? freshTests.data.data : [];
+  const cubeList = cubeTestSets.data?.status === 200 ? cubeTestSets.data.data : [];
+
+  function submitFreshTest() {
+    if (!slumpMm) return;
+    recordFreshTest.mutate(
+      { batchId, data: { slumpMm } },
+      {
+        onSuccess: (result) => {
+          if (result.status === 201) {
+            setSlumpMm("");
+            void freshTests.refetch();
+          }
+        },
+      },
+    );
+  }
+
+  function submitCubeTestSet() {
+    const strengths = specimenStrengthsMpa
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (strengths.length === 0) return;
+    recordCubeTestSet.mutate(
+      { batchId, data: { ageDays: Number(ageDays), specimenStrengthsMpa: strengths } },
+      {
+        onSuccess: (result) => {
+          if (result.status === 201) {
+            setSpecimenStrengthsMpa("");
+            void cubeTestSets.refetch();
+            onCubeTestRecorded();
+          }
+        },
+      },
+    );
+  }
+
+  return (
+    <View style={{ gap: 8, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8, marginTop: 4 }}>
+      <Text style={{ fontSize: 13, fontWeight: "600", color: colors.navy }}>Fresh Tests</Text>
+      {freshList.length === 0 && <Text style={{ fontSize: 12, color: colors.textMuted }}>None recorded.</Text>}
+      {freshList.map((f) => (
+        <Text key={f.id} style={{ fontSize: 12, color: colors.textMuted }}>
+          Slump {f.slumpMm} mm ({new Date(f.testedAt).toLocaleString()})
+        </Text>
+      ))}
+      {permissions.create && (
+        <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+          <Input
+            placeholder="Slump (mm)"
+            value={slumpMm}
+            onChangeText={setSlumpMm}
+            keyboardType="decimal-pad"
+            style={{ flex: 1 }}
+          />
+          <Button label={recordFreshTest.isPending ? "…" : "Record"} onPress={submitFreshTest} disabled={recordFreshTest.isPending} />
+        </View>
+      )}
+
+      <Text style={{ fontSize: 13, fontWeight: "600", color: colors.navy, marginTop: 4 }}>Cube Tests</Text>
+      {cubeList.length === 0 && <Text style={{ fontSize: 12, color: colors.textMuted }}>None recorded.</Text>}
+      {cubeList.map((c) => (
+        <Text
+          key={c.id}
+          style={{ fontSize: 12, color: c.pass === false ? colors.accent : c.pass === true ? colors.success : colors.textMuted }}
+        >
+          Set #{c.setNumber} — {c.ageDays}d — avg {c.averageStrengthMpa} MPa —{" "}
+          {c.pass === null ? "pending" : c.pass ? "PASS" : "FAIL"}
+        </Text>
+      ))}
+      {permissions.create && (
+        <View style={{ gap: 8 }}>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Input placeholder="Age (days)" value={ageDays} onChangeText={setAgeDays} keyboardType="numeric" style={{ width: 90 }} />
+            <Input
+              placeholder="Strengths e.g. 31.0, 32.0, 33.0"
+              value={specimenStrengthsMpa}
+              onChangeText={setSpecimenStrengthsMpa}
+              style={{ flex: 1 }}
+            />
+          </View>
+          <Button
+            label={recordCubeTestSet.isPending ? "…" : "Record Cube Test"}
+            onPress={submitCubeTestSet}
+            disabled={recordCubeTestSet.isPending}
+          />
+        </View>
+      )}
+    </View>
+  );
+}
 
 export default function ProductionOrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -135,6 +244,20 @@ export default function ProductionOrderDetailScreen() {
             <Text style={{ fontWeight: "600" }}>
               Batch #{batch.batchNumber} — {batch.actualQuantityM3} m³
             </Text>
+            {batch.qcFlagged && (
+              <View
+                style={{
+                  alignSelf: "flex-start",
+                  backgroundColor: "#fdecdc",
+                  borderRadius: 999,
+                  paddingHorizontal: 8,
+                  paddingVertical: 2,
+                  marginTop: 4,
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: "600", color: colors.accent }}>QC failed</Text>
+              </View>
+            )}
             {batch.consumptions.map((c) => (
               <Text
                 key={c.id}
@@ -144,6 +267,7 @@ export default function ProductionOrderDetailScreen() {
                 {c.totalCostJod} JOD
               </Text>
             ))}
+            <BatchQCSection batchId={batch.id} onCubeTestRecorded={refetch} />
           </View>
         ))}
       </View>

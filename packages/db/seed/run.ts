@@ -41,6 +41,7 @@ const PERMISSION_MODULES = [
   "mixDesigns",
   "inventory",
   "productionOrders",
+  "qc",
 ] as const;
 const PERMISSION_ACTIONS = ["view", "create", "edit", "approve", "void"] as const;
 

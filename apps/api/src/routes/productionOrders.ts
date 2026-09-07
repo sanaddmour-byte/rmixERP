@@ -93,6 +93,8 @@ function batchToApi(row: BatchRecordRow, consumptions: MaterialConsumptionRow[])
     moistureAdjustmentBasisPoints: row.moistureAdjustmentBasisPoints,
     batchedAt: row.batchedAt.toISOString(),
     consumptions: consumptions.map(consumptionToApi),
+    qcFlagged: row.qcFlagged,
+    qcFlagReason: row.qcFlagReason,
     createdAt: row.createdAt.toISOString(),
   };
 }
