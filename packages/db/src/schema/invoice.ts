@@ -80,6 +80,12 @@ export const invoice = pgTable(
     invoiceNumber: varchar("invoice_number", { length: 40 }).notNull().unique(),
     status: invoiceStatus("status").notNull().default("draft"),
     invoicedAt: timestamp("invoiced_at", { withTimezone: true }).notNull().defaultNow(),
+    // Set once, at issue time (Phase 8), from the customer's payment-terms
+    // days as of that moment — never recomputed from the customer's
+    // *current* terms, so a later change to a customer's terms doesn't
+    // silently move a historical invoice's due date. Null until issued;
+    // drives FIFO-by-due-date collection allocation and the aging report.
+    dueDate: timestamp("due_date", { withTimezone: true }),
     // Self-reference cross-linking a combined+split pair (CLAUDE.md: "a
     // split pair ... generated atomically ... cross-referencing each
     // other"). Null for a combined invoice, which stands alone.
