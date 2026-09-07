@@ -42,6 +42,8 @@ tags:
   - name: invoices
   - name: clearance
   - name: receivables
+  - name: procurement
+  - name: gl
 
 paths:
   /health:
@@ -3286,6 +3288,844 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /purchase-requests:
+    post:
+      operationId: createPurchaseRequest
+      tags: [procurement]
+      summary: Create a draft purchase request (no lines yet) — DOMAIN.md's PR -> PO -> GoodsReceipt -> VendorBill chain.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePurchaseRequestRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseRequestDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    get:
+      operationId: listPurchaseRequests
+      tags: [procurement]
+      summary: List purchase requests.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, submitted, approved, rejected, cancelled] }
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseRequestListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /purchase-requests/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getPurchaseRequest
+      tags: [procurement]
+      summary: Get a purchase request with its lines by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseRequestDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /purchase-requests/{id}/lines:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: createPurchaseRequestLine
+      tags: [procurement]
+      summary: Add a line to a draft purchase request.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePurchaseRequestLineRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseRequestDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /purchase-requests/{id}/submit:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: submitPurchaseRequest
+      tags: [procurement]
+      summary: draft -> submitted.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseRequestDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /purchase-requests/{id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: approvePurchaseRequest
+      tags: [procurement]
+      summary: submitted -> approved. Requires purchaseRequests:approve.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseRequestDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /purchase-requests/{id}/reject:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: rejectPurchaseRequest
+      tags: [procurement]
+      summary: submitted -> rejected. Requires purchaseRequests:approve.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseRequestDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /purchase-requests/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: cancelPurchaseRequest
+      tags: [procurement]
+      summary: draft|submitted -> cancelled.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseRequestDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /purchase-orders:
+    post:
+      operationId: createPurchaseOrder
+      tags: [procurement]
+      summary: >
+        Create a draft purchase order (no lines yet), either standalone or
+        against an approved purchase request (`purchaseRequestId`) — DOMAIN.md's
+        own PurchaseOrder state machine (`draft -> submitted -> approved ->
+        received -> billed`) governs it from here.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePurchaseOrderRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseOrderDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    get:
+      operationId: listPurchaseOrders
+      tags: [procurement]
+      summary: List purchase orders.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, submitted, approved, received, billed, rejected, cancelled] }
+        - name: vendorId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseOrderListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /purchase-orders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getPurchaseOrder
+      tags: [procurement]
+      summary: >
+        Get a purchase order with its lines by id. Each line carries
+        `receivedQuantity` (summed from every goods receipt line against
+        it) and `varianceQuantity` (received - ordered) — PLAN.md's
+        "quantity variance against the PO", computed on demand rather than
+        stored, the same pattern as Phase 3's yield variance.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseOrderDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /purchase-orders/{id}/lines:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: createPurchaseOrderLine
+      tags: [procurement]
+      summary: Add a line to a draft purchase order; recomputes header subtotal/tax/total.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePurchaseOrderLineRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseOrderDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /purchase-orders/{id}/submit:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: submitPurchaseOrder
+      tags: [procurement]
+      summary: draft -> submitted. Requires at least one line.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseOrderDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /purchase-orders/{id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: approvePurchaseOrder
+      tags: [procurement]
+      summary: submitted -> approved. Requires purchaseOrders:approve.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseOrderDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /purchase-orders/{id}/reject:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: rejectPurchaseOrder
+      tags: [procurement]
+      summary: submitted -> rejected. Requires purchaseOrders:approve.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseOrderDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /purchase-orders/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: cancelPurchaseOrder
+      tags: [procurement]
+      summary: draft|submitted|approved -> cancelled. Blocked once any goods have been received.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PurchaseOrderDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /goods-receipts:
+    post:
+      operationId: createGoodsReceipt
+      tags: [procurement]
+      summary: >
+        Record one receiving event against an approved purchase order (one
+        or more lines at once, with optional photos captured inline as
+        data URLs — matching Phase 5's SignaturePad, no object storage in
+        this codebase). Applies each line's quantity to branch stock via
+        the same moving-average `applyStockReceipt` Phase 3 uses for
+        manual stock adjustments. Moves the PO to `received` on its first
+        receipt (DOMAIN.md's coarse-grained PO table has no
+        partially-received state; variance is read from `GET
+        /purchase-orders/{id}` instead).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateGoodsReceiptRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GoodsReceiptDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    get:
+      operationId: listGoodsReceipts
+      tags: [procurement]
+      summary: List goods receipts.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: purchaseOrderId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GoodsReceiptListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /goods-receipts/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getGoodsReceipt
+      tags: [procurement]
+      summary: Get a goods receipt with its lines by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GoodsReceiptDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /vendor-bills:
+    post:
+      operationId: createVendorBill
+      tags: [procurement]
+      summary: >
+        Create a draft vendor bill against a purchase order, one or more
+        lines each referencing a PO line (quantity up to what remains
+        unbilled on that line; price/tax rate are always the PO line's
+        own, never re-entered). Moves the PO to `billed`.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateVendorBillRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VendorBillDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    get:
+      operationId: listVendorBills
+      tags: [procurement]
+      summary: List vendor bills.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, approved, partially_paid, paid, cancelled] }
+        - name: vendorId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VendorBillListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /vendor-bills/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getVendorBill
+      tags: [procurement]
+      summary: Get a vendor bill with its lines and payment allocations by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VendorBillDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /vendor-bills/{id}/approve:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: approveVendorBill
+      tags: [procurement]
+      summary: >
+        draft -> approved. Posts the bill to the GL: debits Inventory (raw
+        material lines) and Tax Input for the bill's tax, credits Accounts
+        Payable for the total — the first of this phase's two GL-posting
+        events (payment is the other).
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VendorBillDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /payments:
+    post:
+      operationId: createPayment
+      tags: [procurement]
+      summary: >
+        Record a payment to a vendor and allocate it across open vendor
+        bills immediately, FIFO by due date or via an explicit manual
+        plan — the AP mirror of Phase 8's `POST /collections`. Posts to
+        the GL: debits Accounts Payable for the allocated amount, credits
+        Cash/Bank.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePaymentRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    get:
+      operationId: listPayments
+      tags: [procurement]
+      summary: List payments.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: vendorId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: method
+          in: query
+          schema: { type: string, enum: [cash, bank_transfer, cheque] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /payments/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getPayment
+      tags: [procurement]
+      summary: Get a payment with its allocations by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PaymentDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /gl/accounts:
+    post:
+      operationId: createAccount
+      tags: [gl]
+      summary: Create a chart-of-accounts entry.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAccountRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    get:
+      operationId: listAccounts
+      tags: [gl]
+      summary: List the chart of accounts.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: type
+          in: query
+          schema: { type: string, enum: [asset, liability, equity, revenue, expense] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /gl/accounts/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getAccount
+      tags: [gl]
+      summary: Get one account by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateAccount
+      tags: [gl]
+      summary: Rename an account or move it in the tree (parentAccountId). Its type/code are immutable once postings exist against it.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateAccountRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Account" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /gl/cost-centers:
+    post:
+      operationId: createCostCenter
+      tags: [gl]
+      summary: Create a cost center.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCostCenterRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CostCenter" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    get:
+      operationId: listCostCenters
+      tags: [gl]
+      summary: List cost centers.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CostCenterListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /gl/journal-entries:
+    get:
+      operationId: listJournalEntries
+      tags: [gl]
+      summary: >
+        List journal entries. Read-only — entries are only ever created as
+        a side effect of a business event (vendor bill approval, payment),
+        never posted directly, per CLAUDE.md's double-entry Hard Rule.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: sourceDocumentType
+          in: query
+          schema: { type: string }
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JournalEntryListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /gl/journal-entries/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getJournalEntry
+      tags: [gl]
+      summary: Get one journal entry with its lines by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JournalEntryDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /gl/reports/trial-balance:
+    get:
+      operationId: getTrialBalance
+      tags: [gl]
+      summary: Every account's balance as of a date, signed positive on its normal side — CLAUDE.md's "a trial balance that doesn't sum to zero fails a test".
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: asOf
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TrialBalanceResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /gl/reports/profit-and-loss:
+    get:
+      operationId: getProfitAndLoss
+      tags: [gl]
+      summary: Revenue and expense account totals over a date range, and the resulting net income.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfitAndLossResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /gl/reports/balance-sheet:
+    get:
+      operationId: getBalanceSheet
+      tags: [gl]
+      summary: Asset/liability/equity account balances as of a date.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: asOf
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BalanceSheetResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /gl/reports/cash-flow:
+    get:
+      operationId: getCashFlow
+      tags: [gl]
+      summary: >
+        Movements on cash/bank accounts (type=asset, code prefix "10")
+        over a date range, with a running balance — a direct-method view
+        of cash in/out, not a full indirect-method statement classifying
+        every account into operating/investing/financing (that
+        classification isn't specified anywhere and would be guessed;
+        documented simplification, not presented as a complete
+        financial statement).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CashFlowResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -5030,3 +5870,503 @@ components:
       properties:
         items: { type: array, items: { $ref: "#/components/schemas/CreditOverrideItem" } }
         totalsByUser: { type: array, items: { $ref: "#/components/schemas/CreditOverrideUserTotal" } }
+
+    PurchaseRequestLine:
+      type: object
+      required: [id, purchaseRequestId, rawMaterialId, quantity, notes, createdAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        purchaseRequestId: { type: string, format: uuid }
+        rawMaterialId: { type: string, format: uuid }
+        quantity: { type: string }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    PurchaseRequest:
+      type: object
+      required:
+        [id, companyId, branchId, requestNumber, requestedBy, status, neededByDate, notes,
+         convertedToPurchaseOrderId, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        requestNumber: { type: string }
+        requestedBy: { type: string, format: uuid }
+        status: { type: string, enum: [draft, submitted, approved, rejected, cancelled] }
+        neededByDate: { type: string, format: date-time, nullable: true }
+        notes: { type: string, nullable: true }
+        convertedToPurchaseOrderId: { type: string, format: uuid, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    PurchaseRequestDetail:
+      allOf:
+        - $ref: "#/components/schemas/PurchaseRequest"
+        - type: object
+          required: [lines]
+          properties:
+            lines: { type: array, items: { $ref: "#/components/schemas/PurchaseRequestLine" } }
+    PurchaseRequestListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/PurchaseRequest" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    CreatePurchaseRequestRequest:
+      type: object
+      required: [branchId]
+      properties:
+        branchId: { type: string, format: uuid }
+        neededByDate: { type: string, format: date-time }
+        notes: { type: string }
+    CreatePurchaseRequestLineRequest:
+      type: object
+      required: [rawMaterialId, quantity]
+      properties:
+        rawMaterialId: { type: string, format: uuid }
+        quantity: { type: string }
+        notes: { type: string }
+
+    PurchaseOrderLine:
+      type: object
+      required:
+        [id, purchaseOrderId, rawMaterialId, quantity, unitPriceJod, taxRateBasisPoints, netJod, taxJod, totalJod,
+         receivedQuantity, varianceQuantity, createdAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        purchaseOrderId: { type: string, format: uuid }
+        rawMaterialId: { type: string, format: uuid }
+        quantity: { type: string }
+        unitPriceJod: { type: string }
+        taxRateBasisPoints: { type: integer }
+        netJod: { type: string }
+        taxJod: { type: string }
+        totalJod: { type: string }
+        receivedQuantity: { type: string, description: "Sum of goods-receipt lines against this PO line." }
+        varianceQuantity: { type: string, description: "receivedQuantity - quantity; positive means over-received." }
+        createdAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    PurchaseOrder:
+      type: object
+      required:
+        [id, companyId, branchId, vendorId, purchaseRequestId, poNumber, status, subtotalJod, taxJod, totalJod,
+         notes, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        vendorId: { type: string, format: uuid }
+        purchaseRequestId: { type: string, format: uuid, nullable: true }
+        poNumber: { type: string }
+        status: { type: string, enum: [draft, submitted, approved, received, billed, rejected, cancelled] }
+        subtotalJod: { type: string }
+        taxJod: { type: string }
+        totalJod: { type: string }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    PurchaseOrderDetail:
+      allOf:
+        - $ref: "#/components/schemas/PurchaseOrder"
+        - type: object
+          required: [lines]
+          properties:
+            lines: { type: array, items: { $ref: "#/components/schemas/PurchaseOrderLine" } }
+    PurchaseOrderListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/PurchaseOrder" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    CreatePurchaseOrderRequest:
+      type: object
+      required: [branchId, vendorId]
+      properties:
+        branchId: { type: string, format: uuid }
+        vendorId: { type: string, format: uuid }
+        purchaseRequestId: { type: string, format: uuid }
+        notes: { type: string }
+    CreatePurchaseOrderLineRequest:
+      type: object
+      required: [rawMaterialId, quantity, unitPriceJod]
+      properties:
+        rawMaterialId: { type: string, format: uuid }
+        quantity: { type: string }
+        unitPriceJod: { type: string }
+        taxRateBasisPoints: { type: integer, description: "Defaults to the standard 1600 (16%) GST rate." }
+
+    GoodsReceiptLine:
+      type: object
+      required: [id, goodsReceiptId, purchaseOrderLineId, quantityReceived, unitCostJod, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        goodsReceiptId: { type: string, format: uuid }
+        purchaseOrderLineId: { type: string, format: uuid }
+        quantityReceived: { type: string }
+        unitCostJod: { type: string }
+        createdAt: { type: string, format: date-time }
+    GoodsReceipt:
+      type: object
+      required:
+        [id, companyId, branchId, purchaseOrderId, receiptNumber, receivedBy, receivedAt, notes, photos,
+         createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        purchaseOrderId: { type: string, format: uuid }
+        receiptNumber: { type: string }
+        receivedBy: { type: string, format: uuid }
+        receivedAt: { type: string, format: date-time }
+        notes: { type: string, nullable: true }
+        photos: { type: array, items: { type: string }, description: "data:image/...;base64,... capture images." }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    GoodsReceiptDetail:
+      allOf:
+        - $ref: "#/components/schemas/GoodsReceipt"
+        - type: object
+          required: [lines]
+          properties:
+            lines: { type: array, items: { $ref: "#/components/schemas/GoodsReceiptLine" } }
+    GoodsReceiptListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/GoodsReceipt" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    CreateGoodsReceiptLineRequest:
+      type: object
+      required: [purchaseOrderLineId, quantityReceived]
+      properties:
+        purchaseOrderLineId: { type: string, format: uuid }
+        quantityReceived: { type: string }
+        unitCostJod: { type: string, description: "Defaults to the PO line's own unit price if omitted." }
+    CreateGoodsReceiptRequest:
+      type: object
+      required: [purchaseOrderId, lines]
+      properties:
+        purchaseOrderId: { type: string, format: uuid }
+        receivedAt: { type: string, format: date-time }
+        notes: { type: string }
+        photos: { type: array, items: { type: string } }
+        lines:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/CreateGoodsReceiptLineRequest" }
+
+    VendorBillLine:
+      type: object
+      required: [id, vendorBillId, purchaseOrderLineId, description, quantity, netJod, taxJod, totalJod, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        vendorBillId: { type: string, format: uuid }
+        purchaseOrderLineId: { type: string, format: uuid }
+        description: { type: string }
+        quantity: { type: string }
+        netJod: { type: string }
+        taxJod: { type: string }
+        totalJod: { type: string }
+        createdAt: { type: string, format: date-time }
+    VendorBill:
+      type: object
+      required:
+        [id, companyId, branchId, vendorId, purchaseOrderId, billNumber, vendorReference, status, subtotalJod,
+         taxJod, totalJod, billDate, dueDate, allocatedJod, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        vendorId: { type: string, format: uuid }
+        purchaseOrderId: { type: string, format: uuid }
+        billNumber: { type: string }
+        vendorReference: { type: string, nullable: true }
+        status: { type: string, enum: [draft, approved, partially_paid, paid, cancelled] }
+        subtotalJod: { type: string }
+        taxJod: { type: string }
+        totalJod: { type: string }
+        billDate: { type: string, format: date-time }
+        dueDate: { type: string, format: date-time }
+        allocatedJod: { type: string, description: "Sum of non-voided payment allocations against this bill." }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    VendorBillDetail:
+      allOf:
+        - $ref: "#/components/schemas/VendorBill"
+        - type: object
+          required: [lines]
+          properties:
+            lines: { type: array, items: { $ref: "#/components/schemas/VendorBillLine" } }
+    VendorBillListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/VendorBill" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    CreateVendorBillLineRequest:
+      type: object
+      required: [purchaseOrderLineId, description, quantity]
+      properties:
+        purchaseOrderLineId: { type: string, format: uuid }
+        description: { type: string }
+        quantity: { type: string, description: "Up to what remains unbilled on the referenced PO line." }
+    CreateVendorBillRequest:
+      type: object
+      required: [purchaseOrderId, dueDate, lines]
+      properties:
+        purchaseOrderId: { type: string, format: uuid }
+        vendorReference: { type: string }
+        dueDate: { type: string, format: date-time }
+        lines:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/CreateVendorBillLineRequest" }
+
+    PaymentAllocationItem:
+      type: object
+      required: [id, paymentId, vendorBillId, amountJod, createdAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        paymentId: { type: string, format: uuid }
+        vendorBillId: { type: string, format: uuid }
+        amountJod: { type: string }
+        createdAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    Payment:
+      type: object
+      required:
+        [id, companyId, branchId, vendorId, method, receiptNumber, amountJod, paidAt, reference, notes,
+         createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        vendorId: { type: string, format: uuid }
+        method: { type: string, enum: [cash, bank_transfer, cheque] }
+        receiptNumber: { type: string }
+        amountJod: { type: string }
+        paidAt: { type: string, format: date-time }
+        reference: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    PaymentDetail:
+      allOf:
+        - $ref: "#/components/schemas/Payment"
+        - type: object
+          required: [allocations]
+          properties:
+            allocations: { type: array, items: { $ref: "#/components/schemas/PaymentAllocationItem" } }
+    PaymentListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Payment" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    CreatePaymentAllocationLine:
+      type: object
+      required: [vendorBillId, amountJod]
+      properties:
+        vendorBillId: { type: string, format: uuid }
+        amountJod: { type: string }
+    CreatePaymentRequest:
+      type: object
+      required: [vendorId, branchId, method, amountJod, paidAt, allocationMode]
+      properties:
+        vendorId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        method: { type: string, enum: [cash, bank_transfer, cheque] }
+        amountJod: { type: string }
+        paidAt: { type: string, format: date-time }
+        reference: { type: string }
+        notes: { type: string }
+        allocationMode: { type: string, enum: [fifo, manual] }
+        allocations:
+          type: array
+          items: { $ref: "#/components/schemas/CreatePaymentAllocationLine" }
+          description: Required (and only used) when allocationMode is "manual".
+
+    Account:
+      type: object
+      required: [id, companyId, code, name, type, parentAccountId, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [asset, liability, equity, revenue, expense] }
+        parentAccountId: { type: string, format: uuid, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    AccountListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Account" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    CreateAccountRequest:
+      type: object
+      required: [code, name, type]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [asset, liability, equity, revenue, expense] }
+        parentAccountId: { type: string, format: uuid }
+    UpdateAccountRequest:
+      type: object
+      properties:
+        name: { type: string }
+        parentAccountId: { type: string, format: uuid, nullable: true }
+
+    CostCenter:
+      type: object
+      required: [id, companyId, branchId, code, name, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid, nullable: true }
+        code: { type: string }
+        name: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CostCenterListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/CostCenter" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    CreateCostCenterRequest:
+      type: object
+      required: [code, name]
+      properties:
+        branchId: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+
+    JournalLineItem:
+      type: object
+      required: [id, journalEntryId, accountId, costCenterId, debitJod, creditJod, description]
+      properties:
+        id: { type: string, format: uuid }
+        journalEntryId: { type: string, format: uuid }
+        accountId: { type: string, format: uuid }
+        costCenterId: { type: string, format: uuid, nullable: true }
+        debitJod: { type: string }
+        creditJod: { type: string }
+        description: { type: string, nullable: true }
+    JournalEntry:
+      type: object
+      required: [id, companyId, branchId, entryDate, description, sourceDocumentType, sourceDocumentId, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        entryDate: { type: string, format: date-time }
+        description: { type: string }
+        sourceDocumentType: { type: string }
+        sourceDocumentId: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+    JournalEntryDetail:
+      allOf:
+        - $ref: "#/components/schemas/JournalEntry"
+        - type: object
+          required: [lines]
+          properties:
+            lines: { type: array, items: { $ref: "#/components/schemas/JournalLineItem" } }
+    JournalEntryListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/JournalEntry" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    TrialBalanceRow:
+      type: object
+      required: [accountId, accountCode, accountName, accountType, balanceJod]
+      properties:
+        accountId: { type: string, format: uuid }
+        accountCode: { type: string }
+        accountName: { type: string }
+        accountType: { type: string, enum: [asset, liability, equity, revenue, expense] }
+        balanceJod: { type: string, description: "Signed positive on the account's normal side." }
+    TrialBalanceResponse:
+      type: object
+      required: [asOf, rows, totalDebitJod, totalCreditJod]
+      properties:
+        asOf: { type: string, format: date-time }
+        rows: { type: array, items: { $ref: "#/components/schemas/TrialBalanceRow" } }
+        totalDebitJod: { type: string }
+        totalCreditJod: { type: string, description: "Always equal to totalDebitJod — the test that fails if they diverge." }
+
+    ProfitAndLossRow:
+      type: object
+      required: [accountId, accountCode, accountName, amountJod]
+      properties:
+        accountId: { type: string, format: uuid }
+        accountCode: { type: string }
+        accountName: { type: string }
+        amountJod: { type: string }
+    ProfitAndLossResponse:
+      type: object
+      required: [from, to, revenue, expenses, totalRevenueJod, totalExpensesJod, netIncomeJod]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        revenue: { type: array, items: { $ref: "#/components/schemas/ProfitAndLossRow" } }
+        expenses: { type: array, items: { $ref: "#/components/schemas/ProfitAndLossRow" } }
+        totalRevenueJod: { type: string }
+        totalExpensesJod: { type: string }
+        netIncomeJod: { type: string }
+
+    BalanceSheetResponse:
+      type: object
+      required: [asOf, assets, liabilities, equity, totalAssetsJod, totalLiabilitiesJod, totalEquityJod]
+      properties:
+        asOf: { type: string, format: date-time }
+        assets: { type: array, items: { $ref: "#/components/schemas/TrialBalanceRow" } }
+        liabilities: { type: array, items: { $ref: "#/components/schemas/TrialBalanceRow" } }
+        equity: { type: array, items: { $ref: "#/components/schemas/TrialBalanceRow" } }
+        totalAssetsJod: { type: string }
+        totalLiabilitiesJod: { type: string }
+        totalEquityJod: { type: string, description: "Includes retained earnings from net income, so totalAssetsJod == totalLiabilitiesJod + totalEquityJod." }
+
+    CashFlowLine:
+      type: object
+      required: [date, description, sourceDocumentType, amountJod, runningBalanceJod]
+      properties:
+        date: { type: string, format: date-time }
+        description: { type: string }
+        sourceDocumentType: { type: string }
+        amountJod: { type: string, description: "Signed: positive for a debit (cash in), negative for a credit (cash out)." }
+        runningBalanceJod: { type: string }
+    CashFlowResponse:
+      type: object
+      required: [from, to, lines, netChangeJod]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        lines: { type: array, items: { $ref: "#/components/schemas/CashFlowLine" } }
+        netChangeJod: { type: string }
