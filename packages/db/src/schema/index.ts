@@ -14,3 +14,6 @@ export * from "./rawMaterial";
 export * from "./vendor";
 export * from "./quotation";
 export * from "./salesOrder";
+export * from "./mixDesign";
+export * from "./inventoryStock";
+export * from "./production";

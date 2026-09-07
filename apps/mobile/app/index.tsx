@@ -20,11 +20,16 @@ const SALES_LINKS = [
   { module: "salesOrders", href: "/sales-orders" },
 ] as const;
 
+const PRODUCTION_LINKS = [{ module: "productionOrders", href: "/production-orders" }] as const;
+
 function MasterDataLink({
   module,
   href,
 }: {
-  module: (typeof MASTER_DATA_LINKS)[number]["module"] | (typeof SALES_LINKS)[number]["module"];
+  module:
+    | (typeof MASTER_DATA_LINKS)[number]["module"]
+    | (typeof SALES_LINKS)[number]["module"]
+    | (typeof PRODUCTION_LINKS)[number]["module"];
   href: string;
 }) {
   const { t } = useLanguage();
@@ -85,6 +90,12 @@ export default function HealthScreen() {
 
           <View>
             {SALES_LINKS.map((link) => (
+              <MasterDataLink key={link.module} module={link.module} href={link.href} />
+            ))}
+          </View>
+
+          <View>
+            {PRODUCTION_LINKS.map((link) => (
               <MasterDataLink key={link.module} module={link.module} href={link.href} />
             ))}
           </View>
