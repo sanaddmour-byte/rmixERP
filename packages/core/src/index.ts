@@ -18,3 +18,4 @@ export * from "./vendorBillStateMachine";
 export * from "./journalEntry";
 export * from "./glDefaultAccounts";
 export * from "./paymentAllocation";
+export * from "./documentExpiry";

@@ -44,6 +44,8 @@ tags:
   - name: receivables
   - name: procurement
   - name: gl
+  - name: fleetOps
+  - name: approvals
 
 paths:
   /health:
@@ -3288,6 +3290,39 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /reports/document-expiry:
+    get:
+      operationId: getDocumentExpiryReport
+      tags: [fleetOps]
+      summary: Trucks/drivers with an already-expired or soon-to-expire (per the company's configured warning window) license/registration/insurance/inspection document.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: asOf
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocumentExpiryReportResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /approvals:
+    get:
+      operationId: listApprovals
+      tags: [approvals]
+      summary: Cross-module approvals inbox -- submitted purchase requests/orders and draft vendor bills the caller has permission to approve, in one unified list.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApprovalsInboxResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
   /purchase-requests:
     post:
       operationId: createPurchaseRequest
@@ -4240,11 +4275,14 @@ components:
 
     Company:
       type: object
-      required: [id, name, taxNumber, createdAt, updatedAt]
+      required: [id, name, taxNumber, documentExpiryWarningDays, createdAt, updatedAt]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
         taxNumber: { type: string, nullable: true }
+        documentExpiryWarningDays:
+          type: integer
+          description: Days before a truck/driver document's expiry it starts showing as a warning (never blocking).
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
     UpdateCompanyRequest:
@@ -4252,6 +4290,7 @@ components:
       properties:
         name: { type: string, minLength: 1 }
         taxNumber: { type: string, nullable: true }
+        documentExpiryWarningDays: { type: integer, minimum: 0 }
 
     Branch:
       type: object
@@ -5290,13 +5329,18 @@ components:
 
     Truck:
       type: object
-      required: [id, companyId, branchId, plateNumber, capacityM3, isActive, createdAt, updatedAt, voidedAt]
+      required:
+        [id, companyId, branchId, plateNumber, capacityM3, registrationExpiresAt, insuranceExpiresAt,
+         inspectionExpiresAt, isActive, createdAt, updatedAt, voidedAt]
       properties:
         id: { type: string, format: uuid }
         companyId: { type: string, format: uuid }
         branchId: { type: string, format: uuid }
         plateNumber: { type: string }
         capacityM3: { type: string, nullable: true }
+        registrationExpiresAt: { type: string, format: date-time, nullable: true }
+        insuranceExpiresAt: { type: string, format: date-time, nullable: true }
+        inspectionExpiresAt: { type: string, format: date-time, nullable: true }
         isActive: { type: boolean }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -5308,6 +5352,9 @@ components:
         branchId: { type: string, format: uuid }
         plateNumber: { type: string, minLength: 1 }
         capacityM3: { type: string, nullable: true }
+        registrationExpiresAt: { type: string, format: date-time, nullable: true }
+        insuranceExpiresAt: { type: string, format: date-time, nullable: true }
+        inspectionExpiresAt: { type: string, format: date-time, nullable: true }
         isActive: { type: boolean }
     UpdateTruckRequest:
       type: object
@@ -5315,6 +5362,9 @@ components:
         branchId: { type: string, format: uuid }
         plateNumber: { type: string, minLength: 1 }
         capacityM3: { type: string, nullable: true }
+        registrationExpiresAt: { type: string, format: date-time, nullable: true }
+        insuranceExpiresAt: { type: string, format: date-time, nullable: true }
+        inspectionExpiresAt: { type: string, format: date-time, nullable: true }
         isActive: { type: boolean }
     TruckListResponse:
       type: object
@@ -5328,7 +5378,8 @@ components:
     Driver:
       type: object
       required:
-        [id, companyId, branchId, name, phone, licenseNumber, isActive, userId, createdAt, updatedAt, voidedAt]
+        [id, companyId, branchId, name, phone, licenseNumber, licenseExpiresAt, isActive, userId, createdAt,
+         updatedAt, voidedAt]
       properties:
         id: { type: string, format: uuid }
         companyId: { type: string, format: uuid }
@@ -5336,6 +5387,7 @@ components:
         name: { type: string }
         phone: { type: string, nullable: true }
         licenseNumber: { type: string, nullable: true }
+        licenseExpiresAt: { type: string, format: date-time, nullable: true }
         isActive: { type: boolean }
         userId:
           type: string
@@ -5353,6 +5405,7 @@ components:
         name: { type: string, minLength: 1 }
         phone: { type: string, nullable: true }
         licenseNumber: { type: string, nullable: true }
+        licenseExpiresAt: { type: string, format: date-time, nullable: true }
         isActive: { type: boolean }
         userId: { type: string, format: uuid, nullable: true }
     UpdateDriverRequest:
@@ -5362,6 +5415,7 @@ components:
         name: { type: string, minLength: 1 }
         phone: { type: string, nullable: true }
         licenseNumber: { type: string, nullable: true }
+        licenseExpiresAt: { type: string, format: date-time, nullable: true }
         isActive: { type: boolean }
         userId: { type: string, format: uuid, nullable: true }
     DriverListResponse:
@@ -5379,7 +5433,8 @@ components:
         [id, companyId, branchId, salesOrderId, salesOrderLineId, productionOrderId, batchRecordId, truckId,
          driverId, quantityM3, status, scheduledAt, dispatchedAt, deliveredAt, qcFlagged, qcFlagReason,
          creditCheckPolicy, creditCheckOutstandingJod, creditCheckExceedsByJod, creditOverride, creditOverrideReason,
-         creditOverrideBy, notes, createdAt, updatedAt, voidedAt]
+         creditOverrideBy, documentExpiryOverride, documentExpiryOverrideReason, documentExpiryOverrideBy, notes,
+         createdAt, updatedAt, voidedAt]
       properties:
         id: { type: string, format: uuid }
         companyId: { type: string, format: uuid }
@@ -5409,6 +5464,9 @@ components:
         creditOverride: { type: boolean }
         creditOverrideReason: { type: string, nullable: true }
         creditOverrideBy: { type: string, format: uuid, nullable: true }
+        documentExpiryOverride: { type: boolean }
+        documentExpiryOverrideReason: { type: string, nullable: true }
+        documentExpiryOverrideBy: { type: string, format: uuid, nullable: true }
         notes: { type: string, nullable: true }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -5870,6 +5928,40 @@ components:
       properties:
         items: { type: array, items: { $ref: "#/components/schemas/CreditOverrideItem" } }
         totalsByUser: { type: array, items: { $ref: "#/components/schemas/CreditOverrideUserTotal" } }
+
+    DocumentExpiryItem:
+      type: object
+      required: [entityType, entityId, label, document, expiresAt, status]
+      properties:
+        entityType: { type: string, enum: [truck, driver] }
+        entityId: { type: string, format: uuid }
+        label: { type: string, description: "The truck's plate number or the driver's name." }
+        document: { type: string, enum: [registration, insurance, inspection, license] }
+        expiresAt: { type: string, format: date-time }
+        status: { type: string, enum: [expired, warning] }
+    DocumentExpiryReportResponse:
+      type: object
+      required: [asOf, warningDays, items]
+      properties:
+        asOf: { type: string, format: date-time }
+        warningDays: { type: integer }
+        items: { type: array, items: { $ref: "#/components/schemas/DocumentExpiryItem" } }
+
+    ApprovalItem:
+      type: object
+      required: [documentType, id, number, branchId, amountJod, createdAt]
+      properties:
+        documentType: { type: string, enum: [purchase_request, purchase_order, vendor_bill] }
+        id: { type: string, format: uuid }
+        number: { type: string, description: "The document's own requestNumber/poNumber/billNumber." }
+        branchId: { type: string, format: uuid }
+        amountJod: { type: string, nullable: true, description: "null for a purchase request, which carries no monetary total." }
+        createdAt: { type: string, format: date-time }
+    ApprovalsInboxResponse:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ApprovalItem" } }
 
     PurchaseRequestLine:
       type: object
