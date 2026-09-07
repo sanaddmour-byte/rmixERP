@@ -12,3 +12,5 @@ export * from "./priceList";
 export * from "./chargeType";
 export * from "./rawMaterial";
 export * from "./vendor";
+export * from "./quotation";
+export * from "./salesOrder";

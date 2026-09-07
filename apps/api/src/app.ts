@@ -15,6 +15,8 @@ import { priceListsRouter } from "./routes/priceLists";
 import { chargeTypesRouter } from "./routes/chargeTypes";
 import { rawMaterialsRouter } from "./routes/rawMaterials";
 import { vendorsRouter } from "./routes/vendors";
+import { quotationsRouter } from "./routes/quotations";
+import { salesOrdersRouter } from "./routes/salesOrders";
 
 export function createApp() {
   const app = express();
@@ -36,6 +38,8 @@ export function createApp() {
   app.use("/api", chargeTypesRouter);
   app.use("/api", rawMaterialsRouter);
   app.use("/api", vendorsRouter);
+  app.use("/api", quotationsRouter);
+  app.use("/api", salesOrdersRouter);
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: { message: "Not found", code: "not_found" } });

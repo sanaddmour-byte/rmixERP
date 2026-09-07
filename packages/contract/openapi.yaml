@@ -29,6 +29,8 @@ tags:
   - name: chargeTypes
   - name: rawMaterials
   - name: vendors
+  - name: quotations
+  - name: salesOrders
 
 paths:
   /health:
@@ -1178,6 +1180,573 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /quotations:
+    get:
+      operationId: listQuotations
+      tags: [quotations]
+      summary: List quotations.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, sent, accepted, rejected, expired, converted] }
+        - name: customerId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuotationListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createQuotation
+      tags: [quotations]
+      summary: Create a draft quotation (no lines yet).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateQuotationRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuotationWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /quotations/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getQuotation
+      tags: [quotations]
+      summary: Get a quotation (with its lines and their charges) by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuotationWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateQuotation
+      tags: [quotations]
+      summary: Update a quotation's notes/validity (draft only).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateQuotationRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuotationWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /quotations/{id}/send:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: sendQuotation
+      tags: [quotations]
+      summary: Transition draft -> sent.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuotationWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /quotations/{id}/accept:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: acceptQuotation
+      tags: [quotations]
+      summary: Transition sent -> accepted.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuotationWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /quotations/{id}/reject:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: rejectQuotation
+      tags: [quotations]
+      summary: Transition sent -> rejected.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuotationWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /quotations/{id}/expire:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: expireQuotation
+      tags: [quotations]
+      summary: Transition sent -> expired.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuotationWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /quotations/{id}/convert:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: convertQuotation
+      tags: [quotations]
+      summary: Transition accepted -> converted, creating a new draft sales order from this quotation's lines/charges.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalesOrderWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /quotations/{quotationId}/lines:
+    parameters:
+      - name: quotationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: createQuotationLine
+      tags: [quotations]
+      summary: Add a product line to a draft quotation (price resolved server-side via the price-list tier chain).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateQuotationLineRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuotationWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /quotations/{quotationId}/lines/{id}:
+    parameters:
+      - name: quotationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: "#/components/parameters/IdParam"
+    delete:
+      operationId: voidQuotationLine
+      tags: [quotations]
+      summary: Soft-delete (void) a quotation line (draft only); recomputes the quotation's totals.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuotationWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /quotations/{quotationId}/lines/{lineId}/charges:
+    parameters:
+      - name: quotationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: lineId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: createQuotationLineCharge
+      tags: [quotations]
+      summary: Apply a commercial charge type (zone/distance, waiting-time, pumping, per-load, seasonal, night-pour, ...) to a quotation line.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateLineChargeRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuotationWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /quotations/{quotationId}/lines/{lineId}/charges/{id}:
+    parameters:
+      - name: quotationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: lineId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: "#/components/parameters/IdParam"
+    delete:
+      operationId: voidQuotationLineCharge
+      tags: [quotations]
+      summary: Soft-delete (void) a charge applied to a quotation line; recomputes totals.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/QuotationWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /sales-orders:
+    get:
+      operationId: listSalesOrders
+      tags: [salesOrders]
+      summary: List sales orders (the order book view).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, confirmed, fulfilled, cancelled] }
+        - name: customerId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalesOrderListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      operationId: createSalesOrder
+      tags: [salesOrders]
+      summary: Create a draft sales order directly (no lines yet), without a prior quotation.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSalesOrderRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalesOrderWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /sales-orders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getSalesOrder
+      tags: [salesOrders]
+      summary: Get a sales order (with its lines and their charges) by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalesOrderWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      operationId: updateSalesOrder
+      tags: [salesOrders]
+      summary: Update a sales order's notes (draft only).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateSalesOrderRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalesOrderWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /sales-orders/{salesOrderId}/lines:
+    parameters:
+      - name: salesOrderId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: createSalesOrderLine
+      tags: [salesOrders]
+      summary: Add a product line to a draft sales order (price resolved server-side via the price-list tier chain).
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateQuotationLineRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalesOrderWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /sales-orders/{salesOrderId}/lines/{id}:
+    parameters:
+      - name: salesOrderId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: "#/components/parameters/IdParam"
+    delete:
+      operationId: voidSalesOrderLine
+      tags: [salesOrders]
+      summary: Soft-delete (void) a sales order line (draft only); recomputes the order's totals.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalesOrderWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /sales-orders/{salesOrderId}/lines/{lineId}/charges:
+    parameters:
+      - name: salesOrderId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: lineId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      operationId: createSalesOrderLineCharge
+      tags: [salesOrders]
+      summary: Apply a commercial charge type to a sales order line.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateLineChargeRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalesOrderWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /sales-orders/{salesOrderId}/lines/{lineId}/charges/{id}:
+    parameters:
+      - name: salesOrderId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: lineId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: "#/components/parameters/IdParam"
+    delete:
+      operationId: voidSalesOrderLineCharge
+      tags: [salesOrders]
+      summary: Soft-delete (void) a charge applied to a sales order line; recomputes totals.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalesOrderWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /sales-orders/{id}/confirm:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: confirmSalesOrder
+      tags: [salesOrders]
+      summary: >
+        Transition draft -> confirmed, running the credit check (policy
+        none/warning/block). A `block` policy that is exceeded returns 409
+        unless `override` is supplied, which additionally requires the
+        `salesOrders:approve` permission and is audited.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConfirmSalesOrderRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalesOrderWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "409":
+          description: Blocked by credit policy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /sales-orders/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: cancelSalesOrder
+      tags: [salesOrders]
+      summary: Transition draft|confirmed -> cancelled.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VoidRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalesOrderWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /sales-orders/{id}/fulfill:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: fulfillSalesOrder
+      tags: [salesOrders]
+      summary: Transition confirmed -> fulfilled.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SalesOrderWithLines" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1644,14 +2213,15 @@ components:
     ChargeType:
       type: object
       required:
-        [id, companyId, name, calculationMethod, defaultAmountJod, taxRateBasisPoints, isActive,
-         createdAt, updatedAt, voidedAt]
+        [id, companyId, name, calculationMethod, defaultAmountJod, percentageBasisPoints, taxRateBasisPoints,
+         isActive, createdAt, updatedAt, voidedAt]
       properties:
         id: { type: string, format: uuid }
         companyId: { type: string, format: uuid }
         name: { type: string }
         calculationMethod: { type: string, enum: [flat, per_unit, percentage] }
-        defaultAmountJod: { type: string, nullable: true }
+        defaultAmountJod: { type: string, nullable: true, description: "Rate for flat/per_unit, JOD per occurrence/unit." }
+        percentageBasisPoints: { type: integer, nullable: true, description: "Rate for the percentage method." }
         taxRateBasisPoints: { type: integer }
         isActive: { type: boolean }
         createdAt: { type: string, format: date-time }
@@ -1664,6 +2234,7 @@ components:
         name: { type: string, minLength: 1 }
         calculationMethod: { type: string, enum: [flat, per_unit, percentage] }
         defaultAmountJod: { type: string, nullable: true }
+        percentageBasisPoints: { type: integer, nullable: true }
         taxRateBasisPoints: { type: integer }
         isActive: { type: boolean }
     UpdateChargeTypeRequest:
@@ -1672,6 +2243,7 @@ components:
         name: { type: string, minLength: 1 }
         calculationMethod: { type: string, enum: [flat, per_unit, percentage] }
         defaultAmountJod: { type: string, nullable: true }
+        percentageBasisPoints: { type: integer, nullable: true }
         taxRateBasisPoints: { type: integer }
         isActive: { type: boolean }
     ChargeTypeListResponse:
@@ -1770,3 +2342,198 @@ components:
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
+
+    Quotation:
+      type: object
+      required:
+        [id, companyId, branchId, customerId, projectId, status, validUntil, notes,
+         subtotalJod, taxJod, totalJod, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        projectId: { type: string, format: uuid, nullable: true }
+        status: { type: string, enum: [draft, sent, accepted, rejected, expired, converted] }
+        validUntil: { type: string, format: date-time, nullable: true }
+        notes: { type: string, nullable: true }
+        subtotalJod: { type: string }
+        taxJod: { type: string }
+        totalJod: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateQuotationRequest:
+      type: object
+      required: [customerId, branchId]
+      properties:
+        customerId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        projectId: { type: string, format: uuid, nullable: true }
+        validUntil: { type: string, format: date-time, nullable: true }
+        notes: { type: string, nullable: true }
+    UpdateQuotationRequest:
+      type: object
+      properties:
+        validUntil: { type: string, format: date-time, nullable: true }
+        notes: { type: string, nullable: true }
+    QuotationListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Quotation" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    LineCharge:
+      type: object
+      required:
+        [id, companyId, chargeTypeId, calculationMethod, quantity, amountJod, taxRateBasisPoints, taxJod,
+         createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        chargeTypeId: { type: string, format: uuid }
+        calculationMethod: { type: string, enum: [flat, per_unit, percentage] }
+        quantity: { type: string, nullable: true, description: "per_unit only." }
+        amountJod: { type: string }
+        taxRateBasisPoints: { type: integer }
+        taxJod: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateLineChargeRequest:
+      type: object
+      required: [chargeTypeId]
+      properties:
+        chargeTypeId: { type: string, format: uuid }
+        quantity: { type: string, nullable: true, description: "Required when the charge type's calculationMethod is per_unit." }
+
+    QuotationLine:
+      type: object
+      required:
+        [id, companyId, quotationId, productId, quantityM3, priceListId, priceResolutionTier,
+         concreteUnitPriceJod, deliveryUnitPriceJod, taxRateBasisPoints, netJod, taxJod, totalJod,
+         charges, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        quotationId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        quantityM3: { type: string }
+        priceListId: { type: string, format: uuid }
+        priceResolutionTier: { type: string, enum: [project, customer, branch, company] }
+        concreteUnitPriceJod: { type: string }
+        deliveryUnitPriceJod: { type: string }
+        taxRateBasisPoints: { type: integer }
+        netJod: { type: string }
+        taxJod: { type: string }
+        totalJod: { type: string }
+        charges: { type: array, items: { $ref: "#/components/schemas/LineCharge" } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateQuotationLineRequest:
+      type: object
+      required: [productId, quantityM3]
+      properties:
+        productId: { type: string, format: uuid }
+        quantityM3: { type: string }
+    QuotationWithLines:
+      allOf:
+        - $ref: "#/components/schemas/Quotation"
+        - type: object
+          required: [lines]
+          properties:
+            lines: { type: array, items: { $ref: "#/components/schemas/QuotationLine" } }
+
+    SalesOrder:
+      type: object
+      required:
+        [id, companyId, branchId, customerId, projectId, quotationId, status, notes,
+         creditCheckPolicy, creditCheckOutstandingJod, creditCheckExceedsByJod, creditOverride,
+         creditOverrideReason, creditOverrideBy, subtotalJod, taxJod, totalJod,
+         createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        projectId: { type: string, format: uuid, nullable: true }
+        quotationId: { type: string, format: uuid, nullable: true }
+        status: { type: string, enum: [draft, confirmed, fulfilled, cancelled] }
+        notes: { type: string, nullable: true }
+        creditCheckPolicy: { type: string, enum: [none, warning, block], nullable: true }
+        creditCheckOutstandingJod: { type: string, nullable: true }
+        creditCheckExceedsByJod: { type: string, nullable: true }
+        creditOverride: { type: boolean }
+        creditOverrideReason: { type: string, nullable: true }
+        creditOverrideBy: { type: string, format: uuid, nullable: true }
+        subtotalJod: { type: string }
+        taxJod: { type: string }
+        totalJod: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    CreateSalesOrderRequest:
+      type: object
+      required: [customerId, branchId]
+      properties:
+        customerId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        projectId: { type: string, format: uuid, nullable: true }
+        notes: { type: string, nullable: true }
+    UpdateSalesOrderRequest:
+      type: object
+      properties:
+        notes: { type: string, nullable: true }
+    ConfirmSalesOrderRequest:
+      type: object
+      properties:
+        override:
+          type: object
+          nullable: true
+          required: [reason]
+          properties:
+            reason: { type: string, minLength: 1 }
+    SalesOrderListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/SalesOrder" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    SalesOrderLine:
+      type: object
+      required:
+        [id, companyId, salesOrderId, productId, quantityM3, priceListId, priceResolutionTier,
+         concreteUnitPriceJod, deliveryUnitPriceJod, taxRateBasisPoints, netJod, taxJod, totalJod,
+         charges, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        salesOrderId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        quantityM3: { type: string }
+        priceListId: { type: string, format: uuid }
+        priceResolutionTier: { type: string, enum: [project, customer, branch, company] }
+        concreteUnitPriceJod: { type: string }
+        deliveryUnitPriceJod: { type: string }
+        taxRateBasisPoints: { type: integer }
+        netJod: { type: string }
+        taxJod: { type: string }
+        totalJod: { type: string }
+        charges: { type: array, items: { $ref: "#/components/schemas/LineCharge" } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+    SalesOrderWithLines:
+      allOf:
+        - $ref: "#/components/schemas/SalesOrder"
+        - type: object
+          required: [lines]
+          properties:
+            lines: { type: array, items: { $ref: "#/components/schemas/SalesOrderLine" } }

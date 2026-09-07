@@ -15,6 +15,8 @@ import { PriceListsPage } from "./routes/PriceListsPage";
 import { ChargeTypesPage } from "./routes/ChargeTypesPage";
 import { RawMaterialsPage } from "./routes/RawMaterialsPage";
 import { VendorsPage } from "./routes/VendorsPage";
+import { QuotationsPage } from "./routes/QuotationsPage";
+import { SalesOrdersPage } from "./routes/SalesOrdersPage";
 import { clearSession, getAccessToken } from "./lib/session";
 import { useCurrentUser } from "./lib/useCurrentUser";
 
@@ -30,6 +32,8 @@ const MASTER_DATA_LINKS: { href: string; labelKey: keyof Translations["nav"] }[]
   { href: "/charge-types", labelKey: "chargeTypes" },
   { href: "/raw-materials", labelKey: "rawMaterials" },
   { href: "/vendors", labelKey: "vendors" },
+  { href: "/quotations", labelKey: "quotations" },
+  { href: "/sales-orders", labelKey: "salesOrders" },
 ];
 
 function Nav() {
@@ -112,6 +116,8 @@ export function App() {
           <Route path="/charge-types" component={ChargeTypesPage} />
           <Route path="/raw-materials" component={RawMaterialsPage} />
           <Route path="/vendors" component={VendorsPage} />
+          <Route path="/quotations" component={QuotationsPage} />
+          <Route path="/sales-orders" component={SalesOrdersPage} />
           <Route path="/" component={HealthPage} />
         </Switch>
       </main>

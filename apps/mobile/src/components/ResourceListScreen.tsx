@@ -10,7 +10,7 @@ interface ResourceListScreenProps<T extends { id: string }> {
   pageSize: number;
   isLoading: boolean;
   onPageChange: (page: number) => void;
-  onSearch: (q: string) => void;
+  onSearch?: (q: string) => void;
   onPressItem: (item: T) => void;
   renderRow: (item: T) => { title: string; subtitle?: string | undefined };
 }
@@ -32,12 +32,14 @@ export function ResourceListScreen<T extends { id: string }>({
 
   return (
     <View style={{ flex: 1, padding: 16, gap: 12 }}>
-      <TextInput
-        placeholder={t.resource.search}
-        onChangeText={onSearch}
-        autoCapitalize="none"
-        style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 6, padding: 10 }}
-      />
+      {onSearch && (
+        <TextInput
+          placeholder={t.resource.search}
+          onChangeText={onSearch}
+          autoCapitalize="none"
+          style={{ borderWidth: 1, borderColor: colors.border, borderRadius: 6, padding: 10 }}
+        />
+      )}
 
       {isLoading && <ActivityIndicator />}
       {!isLoading && items.length === 0 && <Text style={{ color: colors.textMuted }}>{t.resource.empty}</Text>}
