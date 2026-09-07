@@ -27,6 +27,7 @@ import { driversRouter } from "./routes/drivers";
 import { deliveryOrdersRouter } from "./routes/deliveryOrders";
 import { invoicesRouter } from "./routes/invoices";
 import { clearanceRouter } from "./routes/clearance";
+import { receivablesRouter } from "./routes/receivables";
 
 export function createApp() {
   const app = express();
@@ -60,6 +61,7 @@ export function createApp() {
   app.use("/api", deliveryOrdersRouter);
   app.use("/api", invoicesRouter);
   app.use("/api", clearanceRouter);
+  app.use("/api", receivablesRouter);
 
   app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: { message: "Not found", code: "not_found" } });

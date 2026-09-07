@@ -1,6 +1,6 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
-import { and, eq, ilike, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import { appUser, userRole, withTenant, type Tx } from "@rmixerp/db";
 import { CreateUserBody, UpdateUserBody, VoidUserBody, type User } from "@rmixerp/contract";
 import { db } from "../db";
@@ -57,7 +57,7 @@ usersRouter.get("/users", requireAuth, requirePermission(MODULE, "view"), async 
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(isNull(appUser.voidedAt), q ? ilike(appUser.displayName, `%${q}%`) : undefined);
     const [rows, countRows] = await Promise.all([
-      tx.select().from(appUser).where(where).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(appUser).where(where).orderBy(desc(appUser.createdAt)).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(appUser).where(where),
     ]);
     const apiRows = await Promise.all(rows.map((r) => toApi(tx, r)));

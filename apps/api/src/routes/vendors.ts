@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, eq, ilike, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import { vendor, withTenant, type Tx } from "@rmixerp/db";
 import { CreateVendorBody, UpdateVendorBody, VoidVendorBody, type Vendor } from "@rmixerp/contract";
 import { db } from "../db";
@@ -48,7 +48,7 @@ vendorsRouter.get("/vendors", requireAuth, requirePermission(MODULE, "view"), as
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(isNull(vendor.voidedAt), q ? ilike(vendor.name, `%${q}%`) : undefined);
     const [rows, countRows] = await Promise.all([
-      tx.select().from(vendor).where(where).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(vendor).where(where).orderBy(desc(vendor.createdAt)).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(vendor).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

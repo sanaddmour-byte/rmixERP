@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, eq, ilike, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import { truck, withTenant, type Tx } from "@rmixerp/db";
 import { CreateTruckBody, UpdateTruckBody, VoidTruckBody, type Truck } from "@rmixerp/contract";
 import { db } from "../db";
@@ -49,7 +49,7 @@ trucksRouter.get("/trucks", requireAuth, requirePermission(MODULE, "view"), asyn
       branchId ? eq(truck.branchId, branchId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(truck).where(where).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(truck).where(where).orderBy(desc(truck.createdAt)).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(truck).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   batchRecord,
   deliveryOrder,
@@ -158,7 +158,7 @@ productionOrdersRouter.get("/production-orders", requireAuth, requirePermission(
       branchId ? eq(productionOrder.branchId, branchId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(productionOrder).where(where).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(productionOrder).where(where).orderBy(desc(productionOrder.createdAt)).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(productionOrder).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

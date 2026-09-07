@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, eq, ilike, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
 import { branch, withTenant, type Tx } from "@rmixerp/db";
 import { CreateBranchBody, UpdateBranchBody, VoidBranchBody, type Branch } from "@rmixerp/contract";
 import { db } from "../db";
@@ -43,7 +43,7 @@ branchesRouter.get("/branches", requireAuth, requirePermission(MODULE, "view"), 
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(isNull(branch.voidedAt), q ? ilike(branch.name, `%${q}%`) : undefined);
     const [rows, countRows] = await Promise.all([
-      tx.select().from(branch).where(where).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(branch).where(where).orderBy(desc(branch.createdAt)).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(branch).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

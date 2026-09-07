@@ -61,6 +61,52 @@ async function createOrderWithLine(customerId: string, quantityM3: string) {
   return created.body.id as string;
 }
 
+/**
+ * Creates a real *issued* invoice for a customer — since Phase 8's
+ * credit-exposure computation (`apps/api/src/lib/creditExposure.ts`) sums
+ * real outstanding invoice balances instead of Phase 2's original
+ * confirmed/fulfilled-sales-order proxy, tests exercising the "over the
+ * limit" path need an actual invoice, not just a confirmed order.
+ */
+async function createIssuedInvoiceForCustomer(customerId: string, quantityM3: string): Promise<void> {
+  const orderRes = await request(app).post("/api/sales-orders").set("Authorization", `Bearer ${admin}`).send({ customerId, branchId });
+  const lineRes = await request(app)
+    .post(`/api/sales-orders/${orderRes.body.id}/lines`)
+    .set("Authorization", `Bearer ${admin}`)
+    .send({ productId, quantityM3 });
+  const salesOrderLineId = lineRes.body.lines[0].id as string;
+  await request(app).post(`/api/sales-orders/${orderRes.body.id}/confirm`).set("Authorization", `Bearer ${admin}`);
+
+  const deliveryRes = await request(app)
+    .post("/api/delivery-orders")
+    .set("Authorization", `Bearer ${admin}`)
+    .send({ branchId, salesOrderId: orderRes.body.id, salesOrderLineId, quantityM3, scheduledAt: "2026-01-15T08:00:00.000Z" });
+  const truck = await request(app)
+    .post("/api/trucks")
+    .set("Authorization", `Bearer ${admin}`)
+    .send({ branchId, plateNumber: `SOBKLG-${Date.now()}-${Math.floor(Math.random() * 10000)}` });
+  const driver = await request(app)
+    .post("/api/drivers")
+    .set("Authorization", `Bearer ${admin}`)
+    .send({ branchId, name: `Sales Order Backlog Driver ${Date.now()}-${Math.floor(Math.random() * 10000)}` });
+  await request(app)
+    .post(`/api/delivery-orders/${deliveryRes.body.id}/dispatch`)
+    .set("Authorization", `Bearer ${admin}`)
+    .send({ truckId: truck.body.id, driverId: driver.body.id });
+  await request(app)
+    .post(`/api/delivery-orders/${deliveryRes.body.id}/deliver`)
+    .set("Authorization", `Bearer ${admin}`)
+    .send({ receivedQuantityM3: quantityM3, signedByName: "Site Foreman", signatureData: "data:image/png;base64,AAAA" });
+
+  const invoiceRes = await request(app)
+    .post(`/api/delivery-orders/${deliveryRes.body.id}/invoice`)
+    .set("Authorization", `Bearer ${admin}`)
+    .send({ mode: "combined" });
+  const invoiceId = invoiceRes.body.invoices[0].id as string;
+  await request(app).post(`/api/invoices/${invoiceId}/submit-for-clearance`).set("Authorization", `Bearer ${admin}`).send();
+  await request(app).post(`/api/invoices/${invoiceId}/issue`).set("Authorization", `Bearer ${admin}`).send();
+}
+
 describe("sales orders — confirm and credit check", () => {
   it("rejects confirming an order with no lines", async () => {
     const customerId = await createCustomer();
@@ -173,15 +219,21 @@ describe("sales orders — confirm and credit check", () => {
     expect(res.status).toBe(400);
   });
 
-  it("counts a customer's other confirmed orders toward its outstanding exposure", async () => {
+  it("counts a customer's real outstanding invoice balance toward its exposure (Phase 8 supersedes the confirmed-sales-order proxy)", async () => {
     const customerId = await createCustomer({ creditPolicy: "block", creditLimitJod: "50.000" });
-    const firstOrderId = await createOrderWithLine(customerId, "1"); // 20 JOD, within limit
-    const firstConfirm = await request(app)
-      .post(`/api/sales-orders/${firstOrderId}/confirm`)
+    // A confirmed-but-not-yet-invoiced order carries no exposure under
+    // Phase 8's real-invoice-balance model — confirming it freely is the
+    // point of this first assertion, not an oversight.
+    const uninvoicedOrderId = await createOrderWithLine(customerId, "2"); // 40 JOD, would have blocked under the old proxy
+    const uninvoicedConfirm = await request(app)
+      .post(`/api/sales-orders/${uninvoicedOrderId}/confirm`)
       .set("Authorization", `Bearer ${admin}`);
-    expect(firstConfirm.status).toBe(200);
+    expect(uninvoicedConfirm.status).toBe(200);
 
-    const secondOrderId = await createOrderWithLine(customerId, "2"); // 40 JOD more -> 60 JOD combined, over 50
+    // A real issued invoice for 40 JOD DOES count.
+    await createIssuedInvoiceForCustomer(customerId, "2");
+
+    const secondOrderId = await createOrderWithLine(customerId, "1"); // 20 JOD more -> 60 JOD combined, over 50
     const secondConfirm = await request(app)
       .post(`/api/sales-orders/${secondOrderId}/confirm`)
       .set("Authorization", `Bearer ${admin}`);
