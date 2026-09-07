@@ -46,6 +46,7 @@ tags:
   - name: gl
   - name: fleetOps
   - name: approvals
+  - name: devicePushTokens
 
 paths:
   /health:
@@ -2354,6 +2355,26 @@ paths:
               schema: { $ref: "#/components/schemas/Notification" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
+
+  /device-push-tokens:
+    post:
+      operationId: registerDevicePushToken
+      tags: [devicePushTokens]
+      summary: Register (or refresh) this device's Expo push token for the signed-in user.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterDevicePushTokenRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DevicePushToken" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /trucks:
     get:
@@ -5331,6 +5352,24 @@ components:
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
+
+    DevicePushToken:
+      type: object
+      required: [id, companyId, userId, token, platform, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        token: { type: string }
+        platform: { type: string, enum: [ios, android] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    RegisterDevicePushTokenRequest:
+      type: object
+      required: [token, platform]
+      properties:
+        token: { type: string, minLength: 1 }
+        platform: { type: string, enum: [ios, android] }
 
     Truck:
       type: object
