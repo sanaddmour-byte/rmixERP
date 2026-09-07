@@ -36,11 +36,21 @@ const DISPATCH_LINKS = [
   { module: "deliveryOrders", href: "/deliveries", labelKey: "myDeliveries" },
 ] as const;
 
+// Collectors' field screens (DOMAIN.md/PLAN.md's mobile-critical Phase 8
+// scope). PDC lifecycle management (deposit/clear/bounce/cancel) and the
+// aging/credit-control/credit-overrides reports stay web-only — see
+// docs/PLAN.md's Phase 8 entry.
+const RECEIVABLES_LINKS = [
+  { module: "collections", href: "/collections", labelKey: "collections" },
+  { module: "receivablesReports", href: "/customer-statement", labelKey: "customerStatement" },
+] as const;
+
 type LinkModule =
   | (typeof MASTER_DATA_LINKS)[number]["module"]
   | (typeof SALES_LINKS)[number]["module"]
   | (typeof PRODUCTION_LINKS)[number]["module"]
-  | (typeof DISPATCH_LINKS)[number]["module"];
+  | (typeof DISPATCH_LINKS)[number]["module"]
+  | (typeof RECEIVABLES_LINKS)[number]["module"];
 
 function MasterDataLink({
   module,
@@ -121,6 +131,12 @@ export default function HealthScreen() {
 
           <View>
             {DISPATCH_LINKS.map((link) => (
+              <MasterDataLink key={link.href} module={link.module} href={link.href} labelKey={link.labelKey} />
+            ))}
+          </View>
+
+          <View>
+            {RECEIVABLES_LINKS.map((link) => (
               <MasterDataLink key={link.href} module={link.module} href={link.href} labelKey={link.labelKey} />
             ))}
           </View>
