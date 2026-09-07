@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Link, useSearchParams } from "wouter";
 import {
   useCreateCollection,
   useGetCollection,
@@ -38,13 +39,21 @@ function CollectionDetailPanel({ id }: { id: string }) {
           {d.allocations.length === 0 && <p className="text-navy-400">None.</p>}
           {d.allocations.map((a) => (
             <div key={a.id} className={`text-navy-600 dark:text-navy-300 ${a.voidedAt ? "line-through opacity-50" : ""}`}>
-              {a.amountJod} JOD → invoice {a.invoiceId.slice(0, 8)}… {a.voidedAt && "(unwound)"}
+              {a.amountJod} JOD →{" "}
+              <Link href={`/invoices?id=${a.invoiceId}`} className="text-orange-600 hover:underline dark:text-orange-400">
+                invoice {a.invoiceId.slice(0, 8)}…
+              </Link>{" "}
+              {a.voidedAt && "(unwound)"}
             </div>
           ))}
         </div>
         {d.postDatedCheque && (
           <div className="rounded-md border border-navy-200 bg-navy-50 dark:border-navy-700 dark:bg-navy-800 p-2">
-            <p className="font-semibold text-navy-700 dark:text-navy-300">Post-dated cheque</p>
+            <p className="font-semibold text-navy-700 dark:text-navy-300">
+              <Link href="/post-dated-cheques" className="text-orange-600 hover:underline dark:text-orange-400">
+                Post-dated cheque →
+              </Link>
+            </p>
             <p className="text-navy-600 dark:text-navy-300">
               {d.postDatedCheque.bankName} #{d.postDatedCheque.chequeNumber} — due {new Date(d.postDatedCheque.dueDate).toLocaleDateString()} —{" "}
               <span className="capitalize">{d.postDatedCheque.status}</span>
@@ -255,9 +264,11 @@ function RecordCollectionPanel({ onCreated }: { onCreated: (id: string) => void 
 }
 
 export function CollectionsPage() {
+  const [searchParams] = useSearchParams();
   const [page, setPage] = React.useState(1);
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
-  const list = useListCollections({ page, pageSize: 20 });
+  const [selectedId, setSelectedId] = React.useState<string | null>(() => searchParams.get("id"));
+  const [customerFilterId] = React.useState(() => searchParams.get("customerId") ?? "");
+  const list = useListCollections({ page, pageSize: 20, ...(customerFilterId && { customerId: customerFilterId }) });
   const body = list.data?.status === 200 ? list.data.data : undefined;
   const totalPages = Math.max(1, Math.ceil((body?.total ?? 0) / 20));
 
@@ -274,6 +285,14 @@ export function CollectionsPage() {
         }}
       />
 
+      {customerFilterId && (
+        <p className="text-xs text-navy-500 dark:text-navy-400">
+          Filtered to one customer.{" "}
+          <Link href="/collections" className="text-orange-600 hover:underline dark:text-orange-400">
+            Clear
+          </Link>
+        </p>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Collections</CardTitle>
@@ -293,7 +312,15 @@ export function CollectionsPage() {
               {body?.items.map((row) => (
                 <tr key={row.id} className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800" onClick={() => setSelectedId(row.id)}>
                   <td className="py-2 pe-4">{row.receiptNumber}</td>
-                  <td className="py-2 pe-4">{customerById.get(row.customerId) ?? row.customerId}</td>
+                  <td className="py-2 pe-4">
+                    <Link
+                      href={`/receivables-reports?customerId=${row.customerId}`}
+                      className="hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {customerById.get(row.customerId) ?? row.customerId}
+                    </Link>
+                  </td>
                   <td className="py-2 pe-4 capitalize">{row.method.replace(/_/g, " ")}</td>
                   <td className="py-2 pe-4">{row.amountJod}</td>
                   <td className="py-2 pe-4">{new Date(row.receivedAt).toLocaleDateString()}</td>

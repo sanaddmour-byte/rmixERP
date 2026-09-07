@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useSearchParams } from "wouter";
 import {
   useGetAgingReport,
   useGetCreditControlDashboard,
@@ -17,9 +18,10 @@ function utilizationTone(basisPoints: number): BadgeTone {
 }
 
 function CustomerStatementSection() {
+  const [searchParams] = useSearchParams();
   const customers = useListCustomers({ page: 1, pageSize: 100 });
   const customerOptions = customers.data?.status === 200 && typeof customers.data.data !== "string" ? customers.data.data.items : [];
-  const [customerId, setCustomerId] = React.useState("");
+  const [customerId, setCustomerId] = React.useState(() => searchParams.get("customerId") ?? "");
 
   const statement = useGetCustomerStatement({ customerId }, { query: { enabled: Boolean(customerId) } });
   const s = statement.data?.status === 200 ? statement.data.data : undefined;

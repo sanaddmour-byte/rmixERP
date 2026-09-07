@@ -2559,6 +2559,10 @@ paths:
           in: query
           description: Filter to deliveries assigned to one driver — the mobile driver app's "my deliveries" list.
           schema: { type: string, format: uuid }
+        - name: salesOrderId
+          in: query
+          description: Filter to deliveries drawn from one sales order — the sales-order detail screen's "see its deliveries" link.
+          schema: { type: string, format: uuid }
         - name: scheduledFrom
           in: query
           description: Inclusive lower bound on scheduledAt (for the dispatch board's date range).
