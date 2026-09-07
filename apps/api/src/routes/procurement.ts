@@ -5,6 +5,7 @@ import {
   branch,
   goodsReceipt,
   goodsReceiptLine,
+  notification,
   purchaseOrder,
   purchaseOrderLine,
   purchaseRequest,
@@ -280,6 +281,16 @@ function prTransitionRoute(path: string, from: readonly PurchaseRequestRow["stat
         after: row,
         reason,
       });
+      if (to === "submitted") {
+        await tx.insert(notification).values({
+          companyId: req.auth!.companyId,
+          branchId: row.branchId,
+          type: "purchase_request_submitted",
+          entityType: "purchase_request",
+          entityId: row.id,
+          message: `Purchase request ${row.requestNumber} submitted for approval.`,
+        });
+      }
       return { kind: "ok" as const, body: (await loadPurchaseRequestDetail(tx, id))! };
     });
 
@@ -532,6 +543,16 @@ function poTransitionRoute(
         after: row,
         reason,
       });
+      if (to === "submitted") {
+        await tx.insert(notification).values({
+          companyId: req.auth!.companyId,
+          branchId: row.branchId,
+          type: "purchase_order_submitted",
+          entityType: "purchase_order",
+          entityId: row.id,
+          message: `Purchase order ${row.poNumber} submitted for approval.`,
+        });
+      }
       return { kind: "ok" as const, body: (await loadPurchaseOrderDetail(tx, id))! };
     });
 

@@ -305,14 +305,19 @@ qcRouter.post("/batches/:batchId/cube-test-sets", requireAuth, requirePermission
         })
         .where(eq(batchRecord.id, batchId));
 
+      // entityType/entityId point at the production order, not the batch
+      // itself — a batch has no standalone screen, only ever appearing
+      // embedded in its production order's detail page, so this is what
+      // the notification's deep link (packages/core's
+      // resolveNotificationRoute) can actually navigate to.
       const [notif] = await tx
         .insert(notification)
         .values({
           companyId: req.auth!.companyId,
           branchId: context.order.branchId,
           type: "qc_cube_test_failed",
-          entityType: "batch_record",
-          entityId: batchId,
+          entityType: "production_order",
+          entityId: context.order.id,
           message: `Batch #${context.batch.batchNumber} failed its ${designAgeDays}-day cube test: ${evaluation.averageStrengthMpa.toFixed(2)} MPa average vs ${characteristicStrengthMpa} MPa required.`,
         })
         .returning();
