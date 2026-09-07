@@ -34,6 +34,10 @@ const PRODUCTION_LINKS = [
 const DISPATCH_LINKS = [
   { module: "deliveryOrders", href: "/dispatch", labelKey: "dispatch" },
   { module: "deliveryOrders", href: "/deliveries", labelKey: "myDeliveries" },
+  // The sync queue only ever holds proof-of-delivery submissions today
+  // (syncQueue.ts), so it's gated the same as the delivery screens above
+  // rather than getting its own permission module.
+  { module: "deliveryOrders", href: "/sync-queue", labelKey: "syncQueue" },
 ] as const;
 
 // Collectors' field screens (DOMAIN.md/PLAN.md's mobile-critical Phase 8

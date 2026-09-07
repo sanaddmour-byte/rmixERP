@@ -7,11 +7,13 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { LanguageProvider } from "../src/i18n/LanguageContext";
 import { loadSessionFromStorage } from "../src/lib/session";
+import { useSyncQueueAutoRetry } from "../src/lib/useSyncQueueAutoRetry";
 
 const queryClient = new QueryClient();
 
 export default function RootLayout() {
   const [sessionReady, setSessionReady] = React.useState(false);
+  useSyncQueueAutoRetry();
 
   React.useEffect(() => {
     void loadSessionFromStorage().finally(() => setSessionReady(true));

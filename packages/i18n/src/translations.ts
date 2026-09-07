@@ -47,6 +47,7 @@ export interface Translations {
     reports: string;
     approvalsInbox: string;
     fleetAlerts: string;
+    syncQueue: string;
   };
   navGroups: {
     approvals: string;
@@ -161,6 +162,7 @@ export const translations: Record<Locale, Translations> = {
       reports: "Reports",
       approvalsInbox: "Approvals Inbox",
       fleetAlerts: "Fleet Alerts",
+      syncQueue: "Sync Queue",
     },
     navGroups: {
       approvals: "Approvals",
@@ -273,6 +275,7 @@ export const translations: Record<Locale, Translations> = {
       reports: "التقارير",
       approvalsInbox: "صندوق الموافقات",
       fleetAlerts: "تنبيهات الأسطول",
+      syncQueue: "قائمة المزامنة",
     },
     navGroups: {
       approvals: "الموافقات",

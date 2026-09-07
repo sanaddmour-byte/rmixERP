@@ -1,11 +1,12 @@
 import * as React from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useDeliverDeliveryOrder, useGetDeliveryOrder } from "@rmixerp/contract";
 import { Button } from "../../src/components/Button";
 import { Input } from "../../src/components/Input";
 import { SignaturePad, type SignaturePadHandle } from "../../src/components/SignaturePad";
 import { useRequireAuth } from "../../src/lib/useRequireAuth";
+import { enqueueProofOfDelivery } from "../../src/lib/syncQueue";
 import { colors } from "../../src/theme";
 
 export default function DeliveryDetailScreen() {
@@ -32,8 +33,9 @@ export default function DeliveryDetailScreen() {
       setError("Received quantity, signed-by name, and a signature are all required.");
       return;
     }
+    const data = { receivedQuantityM3, signedByName, signatureData, ...(notes && { notes }) };
     deliver.mutate(
-      { id, data: { receivedQuantityM3, signedByName, signatureData, ...(notes && { notes }) } },
+      { id, data },
       {
         onSuccess: (result) => {
           if (result.status === 200) {
@@ -41,6 +43,20 @@ export default function DeliveryDetailScreen() {
           } else {
             setError("Could not record the proof of delivery.");
           }
+        },
+        onError: () => {
+          // A thrown mutation error is, by http-client.ts's own contract, a
+          // genuine transport failure (offline/no signal) rather than a
+          // rejected request — the field-offline scenario this queue
+          // exists for. Save the submission locally instead of losing it;
+          // useSyncQueueAutoRetry replays it once connectivity returns.
+          void enqueueProofOfDelivery({ deliveryOrderId: id, request: data }).then(() => {
+            Alert.alert(
+              "Saved offline",
+              "No connection right now — this proof of delivery is saved on this device and will sync automatically once you're back online. You can check its status in Sync Queue.",
+            );
+            router.back();
+          });
         },
       },
     );
