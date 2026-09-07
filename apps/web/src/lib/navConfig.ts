@@ -1,6 +1,6 @@
 import type { Translations } from "@rmixerp/i18n";
 
-export type NavGroupId = "sales" | "operations" | "procurement" | "finance" | "reports" | "admin";
+export type NavGroupId = "approvals" | "sales" | "operations" | "procurement" | "finance" | "reports" | "admin";
 
 export interface NavItem {
   href: string;
@@ -24,6 +24,19 @@ export interface NavGroup {
  * `icon` keys map to `../components/icons.tsx`.
  */
 export const NAV_GROUPS: NavGroup[] = [
+  {
+    id: "approvals",
+    labelKey: "approvals",
+    icon: "checkCircle",
+    items: [
+      // Gated on purchaseOrders:view as a reasonable proxy for "this user
+      // approves things" — the page itself scopes its actual contents to
+      // whichever of purchaseRequests/purchaseOrders/vendorBills:approve
+      // the signed-in user actually holds, which a single NavItem module
+      // gate can't express directly.
+      { href: "/approvals", labelKey: "approvalsInbox", module: "purchaseOrders", icon: "checkCircle" },
+    ],
+  },
   {
     id: "sales",
     labelKey: "sales",
@@ -50,6 +63,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: "/trucks", labelKey: "trucks", module: "trucks", icon: "truck" },
       { href: "/drivers", labelKey: "drivers", module: "drivers", icon: "idCard" },
       { href: "/dispatch", labelKey: "dispatch", module: "deliveryOrders", icon: "calendar" },
+      { href: "/fleet-alerts", labelKey: "fleetAlerts", module: "trucks", icon: "fileClock" },
     ],
   },
   {

@@ -35,6 +35,7 @@ export function DriversPage() {
     { name: "name", label: "Name", type: "text", required: true },
     { name: "phone", label: "Phone", type: "text" },
     { name: "licenseNumber", label: "License Number", type: "text" },
+    { name: "licenseExpiresAt", label: "License Expires", type: "date" },
     { name: "isActive", label: "Active", type: "checkbox" },
     {
       name: "userId",
@@ -50,6 +51,7 @@ export function DriversPage() {
       name: String(values.name ?? ""),
       ...(values.phone && { phone: String(values.phone) }),
       ...(values.licenseNumber && { licenseNumber: String(values.licenseNumber) }),
+      ...(values.licenseExpiresAt && { licenseExpiresAt: new Date(String(values.licenseExpiresAt)).toISOString() }),
       isActive: Boolean(values.isActive),
       userId: values.userId ? String(values.userId) : null,
     };

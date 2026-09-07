@@ -7,7 +7,7 @@ import { useModulePermissions } from "../lib/usePermissions";
 interface CompanyFormProps {
   company: Company;
   editable: boolean;
-  onSave: (values: { name: string; taxNumber: string }) => void;
+  onSave: (values: { name: string; taxNumber: string; documentExpiryWarningDays: number }) => void;
   saving: boolean;
 }
 
@@ -15,10 +15,11 @@ interface CompanyFormProps {
 function CompanyForm({ company, editable, onSave, saving }: CompanyFormProps) {
   const [name, setName] = React.useState(company.name);
   const [taxNumber, setTaxNumber] = React.useState(company.taxNumber ?? "");
+  const [documentExpiryWarningDays, setDocumentExpiryWarningDays] = React.useState(String(company.documentExpiryWarningDays));
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    onSave({ name, taxNumber });
+    onSave({ name, taxNumber, documentExpiryWarningDays: Number(documentExpiryWarningDays) || 30 });
   }
 
   return (
@@ -30,6 +31,16 @@ function CompanyForm({ company, editable, onSave, saving }: CompanyFormProps) {
       <label className="flex flex-col gap-1 text-sm">
         Tax Number
         <Input value={taxNumber} onChange={(e) => setTaxNumber(e.target.value)} disabled={!editable} />
+      </label>
+      <label className="flex flex-col gap-1 text-sm">
+        Document-expiry warning window (days)
+        <Input
+          type="number"
+          min={0}
+          value={documentExpiryWarningDays}
+          onChange={(e) => setDocumentExpiryWarningDays(e.target.value)}
+          disabled={!editable}
+        />
       </label>
       {editable && (
         <Button type="submit" disabled={saving}>
@@ -58,7 +69,9 @@ export function CompanyPage() {
             company={company.data.data}
             editable={permissions.edit}
             saving={update.isPending}
-            onSave={(values) => update.mutate({ data: { name: values.name, taxNumber: values.taxNumber || null } })}
+            onSave={(values) =>
+              update.mutate({ data: { name: values.name, taxNumber: values.taxNumber || null, documentExpiryWarningDays: values.documentExpiryWarningDays } })
+            }
           />
         )}
       </CardContent>

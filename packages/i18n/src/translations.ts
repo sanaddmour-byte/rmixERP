@@ -45,8 +45,11 @@ export interface Translations {
     receivablesReports: string;
     customerStatement: string;
     reports: string;
+    approvalsInbox: string;
+    fleetAlerts: string;
   };
   navGroups: {
+    approvals: string;
     sales: string;
     operations: string;
     procurement: string;
@@ -156,8 +159,11 @@ export const translations: Record<Locale, Translations> = {
       receivablesReports: "Receivables Reports",
       customerStatement: "Customer Statement",
       reports: "Reports",
+      approvalsInbox: "Approvals Inbox",
+      fleetAlerts: "Fleet Alerts",
     },
     navGroups: {
+      approvals: "Approvals",
       sales: "Sales",
       operations: "Operations",
       procurement: "Procurement",
@@ -265,8 +271,11 @@ export const translations: Record<Locale, Translations> = {
       receivablesReports: "تقارير الذمم المدينة",
       customerStatement: "كشف حساب العميل",
       reports: "التقارير",
+      approvalsInbox: "صندوق الموافقات",
+      fleetAlerts: "تنبيهات الأسطول",
     },
     navGroups: {
+      approvals: "الموافقات",
       sales: "المبيعات",
       operations: "العمليات",
       procurement: "المشتريات",
