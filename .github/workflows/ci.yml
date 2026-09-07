@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  PGHOST: localhost
+  PGPORT: 5432
+  PG_OWNER_USER: postgres
+  PG_OWNER_PASSWORD: ci_owner_password
+  APP_DB_ROLE_PASSWORD: ci_app_role_password
+  SEED_COMPANY_ID: 00000000-0000-4000-8000-000000000001
+  SEED_ADMIN_EMAIL: admin@ci.local
+  SEED_ADMIN_PASSWORD: CiTestPass123!
+  JWT_ACCESS_SECRET: ci-access-secret-not-for-production-0000000000
+  JWT_REFRESH_SECRET: ci-refresh-secret-not-for-production-0000000
+  DATABASE_URL: postgres://rmixerp_app:ci_app_role_password@localhost:5432/rmixerp
+  MIGRATE_DATABASE_URL: postgres://postgres:ci_owner_password@localhost:5432/rmixerp
+  TEST_DATABASE_URL: postgres://rmixerp_app:ci_app_role_password@localhost:5432/rmixerp_test
+  TEST_OWNER_DATABASE_URL: postgres://postgres:ci_owner_password@localhost:5432/rmixerp_test
+  TEST_COMPANY_ID: 00000000-0000-4000-8000-000000000001
+  TEST_SEED_ADMIN_EMAIL: admin@ci.local
+  TEST_SEED_ADMIN_PASSWORD: CiTestPass123!
+  COMPANY_ID: 00000000-0000-4000-8000-000000000001
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci_owner_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create databases
+        run: |
+          PGPASSWORD="$PG_OWNER_PASSWORD" psql -h localhost -U postgres -d postgres \
+            -c "CREATE DATABASE rmixerp;" \
+            -c "CREATE DATABASE rmixerp_test;"
+
+      - name: Run migrations (rmixerp)
+        run: pnpm --filter @rmixerp/db migrate
+        env:
+          MIGRATE_DATABASE_URL: postgres://postgres:ci_owner_password@localhost:5432/rmixerp
+
+      - name: Run migrations (rmixerp_test)
+        run: pnpm --filter @rmixerp/db migrate
+        env:
+          MIGRATE_DATABASE_URL: postgres://postgres:ci_owner_password@localhost:5432/rmixerp_test
+
+      - name: Seed rmixerp_test
+        run: pnpm --filter @rmixerp/db seed
+        env:
+          MIGRATE_DATABASE_URL: postgres://postgres:ci_owner_password@localhost:5432/rmixerp_test
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm test

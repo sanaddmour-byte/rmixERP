@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+.turbo/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+.expo/
+.expo-shared/
+apps/mobile/ios/
+apps/mobile/android/
+packages/contract/generated/

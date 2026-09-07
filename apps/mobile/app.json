@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "RMC ERP",
+    "slug": "rmixerp",
+    "scheme": "rmixerp",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": ["expo-router"],
+    "extra": {
+      "apiBaseUrl": "http://localhost:3000/api"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.rmixerp.mobile"
+    },
+    "android": {
+      "package": "com.rmixerp.mobile"
+    }
+  }
+}
