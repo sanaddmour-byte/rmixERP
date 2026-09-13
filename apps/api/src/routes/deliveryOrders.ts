@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
-import { customer, deliveryOrder, batchRecord, proofOfDelivery, salesOrder, salesOrderLine, withTenant, type Tx } from "@rmixerp/db";
-import { assertDeliveryOrderTransition, evaluateCreditCheck, fils, filsToJodString, ZERO_FILS } from "@rmixerp/core";
+import { company, customer, deliveryOrder, batchRecord, driver, proofOfDelivery, salesOrder, salesOrderLine, truck, withTenant, type Tx } from "@rmixerp/db";
+import { assertDeliveryOrderTransition, evaluateCreditCheck, evaluateDocumentExpiry, fils, filsToJodString, ZERO_FILS } from "@rmixerp/core";
 import {
   CreateDeliveryOrderBody,
   DeliverDeliveryOrderBody,
@@ -52,6 +52,9 @@ function toApi(row: DeliveryOrderRow, batch: BatchRecordRow | null): DeliveryOrd
     creditOverride: row.creditOverride,
     creditOverrideReason: row.creditOverrideReason,
     creditOverrideBy: row.creditOverrideBy,
+    documentExpiryOverride: row.documentExpiryOverride,
+    documentExpiryOverrideReason: row.documentExpiryOverrideReason,
+    documentExpiryOverrideBy: row.documentExpiryOverrideBy,
     notes: row.notes,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -280,15 +283,32 @@ deliveryOrdersRouter.post(
         newOrderAmountFils: ZERO_FILS,
       });
 
+      const [truckRow] = await tx.select().from(truck).where(eq(truck.id, input.truckId));
+      const [driverRow] = await tx.select().from(driver).where(eq(driver.id, input.driverId));
+      const [companyRow] = await tx.select().from(company);
+      const documentCheck = evaluateDocumentExpiry({
+        asOf: new Date(),
+        warningDays: companyRow?.documentExpiryWarningDays ?? 30,
+        truck: truckRow
+          ? { registrationExpiresAt: truckRow.registrationExpiresAt, insuranceExpiresAt: truckRow.insuranceExpiresAt, inspectionExpiresAt: truckRow.inspectionExpiresAt }
+          : null,
+        driver: driverRow ? { licenseExpiresAt: driverRow.licenseExpiresAt } : null,
+      });
+
       if (creditCheck.outcome === "blocked" && !input.override) {
         return { kind: "blocked" as const, creditCheck };
       }
-      let appliedOverride = false;
-      if (creditCheck.outcome === "blocked" && input.override) {
+      if (documentCheck.blocked && !input.override) {
+        return { kind: "document_expiry_blocked" as const, documentCheck };
+      }
+      let appliedCreditOverride = false;
+      let appliedDocumentExpiryOverride = false;
+      if ((creditCheck.outcome === "blocked" || documentCheck.blocked) && input.override) {
         if (!(req.auth!.permissions ?? []).includes(`${MODULE}:approve`)) {
           return { kind: "override_forbidden" as const };
         }
-        appliedOverride = true;
+        appliedCreditOverride = creditCheck.outcome === "blocked";
+        appliedDocumentExpiryOverride = documentCheck.blocked;
       }
 
       const [row] = await tx
@@ -301,9 +321,12 @@ deliveryOrdersRouter.post(
           creditCheckPolicy: cust.creditPolicy,
           creditCheckOutstandingFils: creditCheck.projectedOutstandingFils,
           creditCheckExceedsByFils: creditCheck.exceedsByFils,
-          creditOverride: appliedOverride,
-          creditOverrideReason: appliedOverride ? (input.override?.reason ?? null) : null,
-          creditOverrideBy: appliedOverride ? req.auth!.userId : null,
+          creditOverride: appliedCreditOverride,
+          creditOverrideReason: appliedCreditOverride ? (input.override?.reason ?? null) : null,
+          creditOverrideBy: appliedCreditOverride ? req.auth!.userId : null,
+          documentExpiryOverride: appliedDocumentExpiryOverride,
+          documentExpiryOverrideReason: appliedDocumentExpiryOverride ? (input.override?.reason ?? null) : null,
+          documentExpiryOverrideBy: appliedDocumentExpiryOverride ? req.auth!.userId : null,
           updatedAt: new Date(),
         })
         .where(eq(deliveryOrder.id, id))
@@ -319,7 +342,7 @@ deliveryOrdersRouter.post(
         before,
         after: row,
       });
-      if (appliedOverride) {
+      if (appliedCreditOverride) {
         await writeAudit(tx, {
           companyId: req.auth!.companyId,
           branchId: before.branchId,
@@ -327,6 +350,17 @@ deliveryOrdersRouter.post(
           entityType: "delivery_order",
           entityId: row.id,
           action: "credit_override",
+          reason: input.override?.reason ?? null,
+        });
+      }
+      if (appliedDocumentExpiryOverride) {
+        await writeAudit(tx, {
+          companyId: req.auth!.companyId,
+          branchId: before.branchId,
+          actorUserId: req.auth!.userId,
+          entityType: "delivery_order",
+          entityId: row.id,
+          action: "document_expiry_override",
           reason: input.override?.reason ?? null,
         });
       }
@@ -352,6 +386,15 @@ deliveryOrdersRouter.post(
               exceedsByJod: filsToJodString(result.creditCheck.exceedsByFils),
               outstandingJod: filsToJodString(result.creditCheck.projectedOutstandingFils),
             },
+          },
+        });
+        return;
+      case "document_expiry_blocked":
+        res.status(422).json({
+          error: {
+            message: "The assigned truck or driver has an expired document",
+            code: "document_expired",
+            details: { expiredDocuments: result.documentCheck.expiredDocuments },
           },
         });
         return;

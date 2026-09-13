@@ -159,7 +159,7 @@ describe("cube tests — pass/fail evaluation", () => {
       .get("/api/notifications?unreadOnly=true")
       .set("Authorization", `Bearer ${admin}`);
     expect(notifications.status).toBe(200);
-    const notif = notifications.body.items.find((n: { entityId: string }) => n.entityId === batchId);
+    const notif = notifications.body.items.find((n: { entityId: string }) => n.entityId === orderId);
     expect(notif).toBeTruthy();
     expect(notif.type).toBe("qc_cube_test_failed");
 

@@ -22,6 +22,9 @@ function toApi(row: TruckRow): Truck {
     branchId: row.branchId,
     plateNumber: row.plateNumber,
     capacityM3: row.capacityM3,
+    registrationExpiresAt: row.registrationExpiresAt?.toISOString() ?? null,
+    insuranceExpiresAt: row.insuranceExpiresAt?.toISOString() ?? null,
+    inspectionExpiresAt: row.inspectionExpiresAt?.toISOString() ?? null,
     isActive: row.isActive,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -83,6 +86,9 @@ trucksRouter.post("/trucks", requireAuth, requirePermission(MODULE, "create"), a
         branchId: input.branchId,
         plateNumber: input.plateNumber,
         capacityM3: input.capacityM3 ?? null,
+        registrationExpiresAt: input.registrationExpiresAt ? new Date(input.registrationExpiresAt) : null,
+        insuranceExpiresAt: input.insuranceExpiresAt ? new Date(input.insuranceExpiresAt) : null,
+        inspectionExpiresAt: input.inspectionExpiresAt ? new Date(input.inspectionExpiresAt) : null,
         isActive: input.isActive ?? true,
         createdBy: req.auth!.userId,
       })
@@ -122,6 +128,15 @@ trucksRouter.put("/trucks/:id", requireAuth, requirePermission(MODULE, "edit"), 
         ...(input.branchId !== undefined && { branchId: input.branchId }),
         ...(input.plateNumber !== undefined && { plateNumber: input.plateNumber }),
         ...(input.capacityM3 !== undefined && { capacityM3: input.capacityM3 }),
+        ...(input.registrationExpiresAt !== undefined && {
+          registrationExpiresAt: input.registrationExpiresAt ? new Date(input.registrationExpiresAt) : null,
+        }),
+        ...(input.insuranceExpiresAt !== undefined && {
+          insuranceExpiresAt: input.insuranceExpiresAt ? new Date(input.insuranceExpiresAt) : null,
+        }),
+        ...(input.inspectionExpiresAt !== undefined && {
+          inspectionExpiresAt: input.inspectionExpiresAt ? new Date(input.inspectionExpiresAt) : null,
+        }),
         ...(input.isActive !== undefined && { isActive: input.isActive }),
         updatedAt: new Date(),
       })

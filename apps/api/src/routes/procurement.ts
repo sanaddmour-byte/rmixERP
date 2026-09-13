@@ -5,6 +5,7 @@ import {
   branch,
   goodsReceipt,
   goodsReceiptLine,
+  notification,
   purchaseOrder,
   purchaseOrderLine,
   purchaseRequest,
@@ -37,6 +38,7 @@ import {
   WELL_KNOWN_ACCOUNT_CODES,
   ZERO_FILS,
   applyStockReceipt,
+  NOTIFICATION_TYPE_REQUIRED_PERMISSION,
   type Fils,
 } from "@rmixerp/core";
 import {
@@ -72,6 +74,7 @@ import { writeAudit } from "../audit";
 import { allocateDocumentNumber } from "./invoices";
 import { findOrCreateBalance } from "./inventory";
 import { findWellKnownAccount, postJournalEntry } from "../lib/glPosting";
+import { pushForNotification } from "../lib/pushNotifications";
 
 export const procurementRouter = Router();
 const PR_MODULE = "purchaseRequests";
@@ -280,6 +283,24 @@ function prTransitionRoute(path: string, from: readonly PurchaseRequestRow["stat
         after: row,
         reason,
       });
+      if (to === "submitted") {
+        const message = `Purchase request ${row.requestNumber} submitted for approval.`;
+        await tx.insert(notification).values({
+          companyId: req.auth!.companyId,
+          branchId: row.branchId,
+          type: "purchase_request_submitted",
+          entityType: "purchase_request",
+          entityId: row.id,
+          message,
+        });
+        await pushForNotification(tx, {
+          companyId: req.auth!.companyId,
+          requiredPermission: NOTIFICATION_TYPE_REQUIRED_PERMISSION.purchase_request_submitted ?? null,
+          title: "Purchase Request Submitted",
+          body: message,
+          data: { type: "purchase_request_submitted", entityType: "purchase_request", entityId: row.id },
+        });
+      }
       return { kind: "ok" as const, body: (await loadPurchaseRequestDetail(tx, id))! };
     });
 
@@ -532,6 +553,24 @@ function poTransitionRoute(
         after: row,
         reason,
       });
+      if (to === "submitted") {
+        const message = `Purchase order ${row.poNumber} submitted for approval.`;
+        await tx.insert(notification).values({
+          companyId: req.auth!.companyId,
+          branchId: row.branchId,
+          type: "purchase_order_submitted",
+          entityType: "purchase_order",
+          entityId: row.id,
+          message,
+        });
+        await pushForNotification(tx, {
+          companyId: req.auth!.companyId,
+          requiredPermission: NOTIFICATION_TYPE_REQUIRED_PERMISSION.purchase_order_submitted ?? null,
+          title: "Purchase Order Submitted",
+          body: message,
+          data: { type: "purchase_order_submitted", entityType: "purchase_order", entityId: row.id },
+        });
+      }
       return { kind: "ok" as const, body: (await loadPurchaseOrderDetail(tx, id))! };
     });
 

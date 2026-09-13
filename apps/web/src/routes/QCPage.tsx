@@ -3,40 +3,10 @@ import {
   useGetCubeTestTraceability,
   useListAllCubeTestSets,
   useListBranches,
-  useListNotifications,
-  useMarkNotificationRead,
   type ListAllCubeTestSetsResult,
 } from "@rmixerp/contract";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@rmixerp/ui";
-import { refetchOnSuccess } from "../lib/refetchOnSuccess";
-
-function NotificationsPanel() {
-  const notifications = useListNotifications({ page: 1, pageSize: 20, unreadOnly: true });
-  const markRead = useMarkNotificationRead(refetchOnSuccess(notifications));
-  const body = notifications.data?.status === 200 ? notifications.data.data : undefined;
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Notifications {body && body.total > 0 && `(${body.total} unread)`}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {(body?.items.length ?? 0) === 0 && <p className="text-sm text-navy-400">No unread notifications.</p>}
-        {body?.items.map((n) => (
-          <div key={n.id} className="flex items-center justify-between gap-4 rounded-md border border-orange-200 bg-orange-50 p-2 text-sm">
-            <div>
-              <p className="text-orange-900">{n.message}</p>
-              <p className="text-xs text-orange-600">{new Date(n.createdAt).toLocaleString()}</p>
-            </div>
-            <Button size="sm" variant="outline" onClick={() => markRead.mutate({ id: n.id })} disabled={markRead.isPending}>
-              Mark read
-            </Button>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
+import { NotificationsPanel } from "../components/NotificationsPanel";
 
 function CubeTestDetail({ id }: { id: string }) {
   const detail = useGetCubeTestTraceability(id);

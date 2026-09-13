@@ -18,6 +18,7 @@ function toApi(row: CompanyRow): Company {
     id: row.id,
     name: row.name,
     taxNumber: row.taxNumber,
+    documentExpiryWarningDays: row.documentExpiryWarningDays,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -52,6 +53,7 @@ companyRouter.put("/company", requireAuth, requirePermission(MODULE, "edit"), as
       .set({
         ...(input.name !== undefined && { name: input.name }),
         ...(input.taxNumber !== undefined && { taxNumber: input.taxNumber }),
+        ...(input.documentExpiryWarningDays !== undefined && { documentExpiryWarningDays: input.documentExpiryWarningDays }),
         updatedAt: new Date(),
       })
       .where(eq(company.id, req.auth!.companyId))

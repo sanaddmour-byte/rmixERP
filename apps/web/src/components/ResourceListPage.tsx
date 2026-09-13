@@ -11,7 +11,7 @@ export interface Column<T> {
 export interface FieldConfig {
   name: string;
   label: string;
-  type: "text" | "number" | "select" | "checkbox" | "multiselect";
+  type: "text" | "number" | "date" | "select" | "checkbox" | "multiselect";
   options?: { value: string; label: string }[];
   required?: boolean;
 }
@@ -215,6 +215,8 @@ export function ResourceListPage<T extends { id: string }>({
                 const value = (editingRow as Record<string, unknown>)[f.name];
                 if (typeof value === "boolean" || Array.isArray(value)) {
                   acc[f.name] = value as boolean | string[];
+                } else if (f.type === "date" && typeof value === "string") {
+                  acc[f.name] = value.slice(0, 10); // ISO date-time -> the yyyy-mm-dd a native date input expects
                 } else {
                   acc[f.name] = value?.toString() ?? "";
                 }

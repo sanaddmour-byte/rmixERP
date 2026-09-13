@@ -1,10 +1,10 @@
-import { boolean, numeric, pgTable, unique, uuid, varchar } from "drizzle-orm/pg-core";
+import { boolean, numeric, pgTable, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
 import { auditColumns, idColumn, tenantIsolationPolicy } from "./columns";
 import { company } from "./company";
 import { branch } from "./branch";
 import { appUser } from "./user";
 
-/** A mixer truck, assigned to deliveries at dispatch. */
+/** A mixer truck, assigned to deliveries at dispatch. Expiry dates power Phase 10's document-expiry dispatch block/alerts — nullable since not every truck has all three tracked yet. */
 export const truck = pgTable(
   "truck",
   {
@@ -17,6 +17,9 @@ export const truck = pgTable(
       .references(() => branch.id),
     plateNumber: varchar("plate_number", { length: 30 }).notNull(),
     capacityM3: numeric("capacity_m3", { precision: 6, scale: 2 }),
+    registrationExpiresAt: timestamp("registration_expires_at", { withTimezone: true }),
+    insuranceExpiresAt: timestamp("insurance_expires_at", { withTimezone: true }),
+    inspectionExpiresAt: timestamp("inspection_expires_at", { withTimezone: true }),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns(),
   },
@@ -26,7 +29,7 @@ export const truck = pgTable(
 export type Truck = typeof truck.$inferSelect;
 export type NewTruck = typeof truck.$inferInsert;
 
-/** A driver, assigned to deliveries at dispatch. Document-expiry alerts (license etc.) are Phase 10. */
+/** A driver, assigned to deliveries at dispatch. `licenseExpiresAt` powers Phase 10's document-expiry dispatch block/alerts. */
 export const driver = pgTable(
   "driver",
   {
@@ -40,6 +43,7 @@ export const driver = pgTable(
     name: varchar("name", { length: 200 }).notNull(),
     phone: varchar("phone", { length: 30 }),
     licenseNumber: varchar("license_number", { length: 50 }),
+    licenseExpiresAt: timestamp("license_expires_at", { withTimezone: true }),
     isActive: boolean("is_active").notNull().default(true),
     // Optional link to the login this driver uses on mobile — lets the
     // driver app resolve "my assigned deliveries" without guessing at an

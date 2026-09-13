@@ -23,6 +23,9 @@ export function TrucksPage() {
     },
     { name: "plateNumber", label: "Plate Number", type: "text", required: true },
     { name: "capacityM3", label: "Capacity (m³)", type: "text" },
+    { name: "registrationExpiresAt", label: "Registration Expires", type: "date" },
+    { name: "insuranceExpiresAt", label: "Insurance Expires", type: "date" },
+    { name: "inspectionExpiresAt", label: "Inspection Expires", type: "date" },
     { name: "isActive", label: "Active", type: "checkbox" },
   ];
 
@@ -31,6 +34,9 @@ export function TrucksPage() {
       branchId: String(values.branchId ?? ""),
       plateNumber: String(values.plateNumber ?? ""),
       ...(values.capacityM3 && { capacityM3: String(values.capacityM3) }),
+      ...(values.registrationExpiresAt && { registrationExpiresAt: new Date(String(values.registrationExpiresAt)).toISOString() }),
+      ...(values.insuranceExpiresAt && { insuranceExpiresAt: new Date(String(values.insuranceExpiresAt)).toISOString() }),
+      ...(values.inspectionExpiresAt && { inspectionExpiresAt: new Date(String(values.inspectionExpiresAt)).toISOString() }),
       isActive: Boolean(values.isActive),
     };
   }

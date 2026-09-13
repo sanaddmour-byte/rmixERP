@@ -1,16 +1,23 @@
-import { pgTable, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import { pgEnum, pgTable, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 import { idColumn, tenantIsolationPolicy } from "./columns";
 import { company } from "./company";
 import { branch } from "./branch";
 import { appUser } from "./user";
 
+/** Mirrors `packages/core`'s `NOTIFICATION_TYPES` — kept in lockstep by hand since drizzle-kit needs a literal list, not an import. */
+export const notificationType = pgEnum("notification_type", ["qc_cube_test_failed", "purchase_request_submitted", "purchase_order_submitted"]);
+
 /**
  * Company/branch-scoped notification log (DOMAIN.md's cross-cutting
- * `Notification` entity, first needed here for QC failure alerts).
- * Interim broadcast design: visible to anyone in the company/branch with
- * permission on the referenced module, not targeted to one user — Phase
- * 10 owns the real per-user inbox + typed deep-link resolver across all
- * modules; this is not a guess at that shape, just today's minimum.
+ * `Notification` entity). `userId` (Phase 10) is real per-user targeting
+ * for a future individually-assigned notification — every current
+ * producer is role-based (anyone who can act on the thing, not one named
+ * person) and leaves it null, so `GET /notifications` filters by the
+ * viewer's own permission for the notification's `type`
+ * (`packages/core`'s `NOTIFICATION_TYPE_REQUIRED_PERMISSION`) rather than
+ * by identity — that's what "real per-user inbox" means for a role-based
+ * permission system, not a guess at individual assignment this app has no
+ * concept of yet.
  */
 export const notification = pgTable(
   "notification",
@@ -20,7 +27,8 @@ export const notification = pgTable(
       .notNull()
       .references(() => company.id),
     branchId: uuid("branch_id").references(() => branch.id),
-    type: varchar("type", { length: 100 }).notNull(),
+    userId: uuid("user_id").references(() => appUser.id),
+    type: notificationType("type").notNull(),
     entityType: varchar("entity_type", { length: 100 }).notNull(),
     entityId: uuid("entity_id").notNull(),
     message: varchar("message", { length: 1000 }).notNull(),

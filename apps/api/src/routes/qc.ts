@@ -12,7 +12,8 @@ import {
   withTenant,
   type Tx,
 } from "@rmixerp/db";
-import { evaluateCubeTest } from "@rmixerp/core";
+import { evaluateCubeTest, NOTIFICATION_TYPE_REQUIRED_PERMISSION } from "@rmixerp/core";
+import { pushForNotification } from "../lib/pushNotifications";
 import {
   RecordCubeTestSetBody,
   RecordFreshTestBody,
@@ -305,14 +306,19 @@ qcRouter.post("/batches/:batchId/cube-test-sets", requireAuth, requirePermission
         })
         .where(eq(batchRecord.id, batchId));
 
+      // entityType/entityId point at the production order, not the batch
+      // itself — a batch has no standalone screen, only ever appearing
+      // embedded in its production order's detail page, so this is what
+      // the notification's deep link (packages/core's
+      // resolveNotificationRoute) can actually navigate to.
       const [notif] = await tx
         .insert(notification)
         .values({
           companyId: req.auth!.companyId,
           branchId: context.order.branchId,
           type: "qc_cube_test_failed",
-          entityType: "batch_record",
-          entityId: batchId,
+          entityType: "production_order",
+          entityId: context.order.id,
           message: `Batch #${context.batch.batchNumber} failed its ${designAgeDays}-day cube test: ${evaluation.averageStrengthMpa.toFixed(2)} MPa average vs ${characteristicStrengthMpa} MPa required.`,
         })
         .returning();
@@ -326,6 +332,16 @@ qcRouter.post("/batches/:batchId/cube-test-sets", requireAuth, requirePermission
         action: "qc_flagged",
         after: notif,
       });
+
+      if (notif) {
+        await pushForNotification(tx, {
+          companyId: req.auth!.companyId,
+          requiredPermission: NOTIFICATION_TYPE_REQUIRED_PERMISSION.qc_cube_test_failed ?? null,
+          title: "QC Alert",
+          body: notif.message,
+          data: { type: notif.type, entityType: notif.entityType, entityId: notif.entityId },
+        });
+      }
     }
 
     return { kind: "ok" as const, set: newSet, specimens: specimenRows };
