@@ -354,7 +354,7 @@ receivablesRouter.get("/collections", requireAuth, requirePermission(COLLECTIONS
       customerId ? eq(collection.customerId, customerId) : undefined,
       method ? eq(collection.method, method as CollectionRow["method"]) : undefined,
     );
-    const rows = await tx.select().from(collection).where(where).orderBy(desc(collection.receivedAt)).limit(pagination.limit).offset(pagination.offset);
+    const rows = await tx.select().from(collection).where(where).orderBy(desc(collection.receivedAt), collection.id).limit(pagination.limit).offset(pagination.offset);
     const countRows = await tx.select({ count: sql<number>`count(*)::int` }).from(collection).where(where);
     return { items: rows, total: countRows[0]?.count ?? 0 };
   });
@@ -382,7 +382,7 @@ receivablesRouter.get("/post-dated-cheques", requireAuth, requirePermission(PDC_
       status ? eq(postDatedCheque.status, status as PdcRow["status"]) : undefined,
       customerId ? eq(postDatedCheque.customerId, customerId) : undefined,
     );
-    const rows = await tx.select().from(postDatedCheque).where(where).orderBy(postDatedCheque.dueDate).limit(pagination.limit).offset(pagination.offset);
+    const rows = await tx.select().from(postDatedCheque).where(where).orderBy(postDatedCheque.dueDate, postDatedCheque.id).limit(pagination.limit).offset(pagination.offset);
     const countRows = await tx.select({ count: sql<number>`count(*)::int` }).from(postDatedCheque).where(where);
     return { items: rows, total: countRows[0]?.count ?? 0 };
   });
