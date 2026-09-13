@@ -60,7 +60,7 @@ notificationsRouter.get("/notifications", requireAuth, async (req, res) => {
         .select()
         .from(notification)
         .where(where)
-        .orderBy(desc(notification.createdAt))
+        .orderBy(desc(notification.createdAt), notification.id)
         .limit(pagination.limit)
         .offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(notification).where(where),
