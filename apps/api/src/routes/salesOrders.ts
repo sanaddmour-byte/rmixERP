@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   salesOrder,
   salesOrderLine,
@@ -182,7 +182,7 @@ salesOrdersRouter.get("/sales-orders", requireAuth, requirePermission(MODULE, "v
       customerId ? eq(salesOrder.customerId, customerId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(salesOrder).where(where).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(salesOrder).where(where).orderBy(desc(salesOrder.createdAt), salesOrder.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(salesOrder).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };
