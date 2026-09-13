@@ -83,7 +83,7 @@ mixDesignsRouter.get("/mix-designs", requireAuth, requirePermission(MODULE, "vie
       branchId ? eq(mixDesign.branchId, branchId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(mixDesign).where(where).orderBy(desc(mixDesign.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(mixDesign).where(where).orderBy(desc(mixDesign.createdAt), mixDesign.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(mixDesign).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

@@ -84,7 +84,7 @@ inventoryRouter.get("/stock-balances", requireAuth, requirePermission(MODULE, "v
       rawMaterialId ? eq(stockBalance.rawMaterialId, rawMaterialId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(stockBalance).where(where).orderBy(desc(stockBalance.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(stockBalance).where(where).orderBy(desc(stockBalance.createdAt), stockBalance.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(stockBalance).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };
@@ -104,7 +104,7 @@ inventoryRouter.get("/stock-adjustments", requireAuth, requirePermission(MODULE,
       rawMaterialId ? eq(stockAdjustment.rawMaterialId, rawMaterialId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(stockAdjustment).where(where).orderBy(desc(stockAdjustment.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(stockAdjustment).where(where).orderBy(desc(stockAdjustment.createdAt), stockAdjustment.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(stockAdjustment).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

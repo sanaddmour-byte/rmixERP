@@ -47,7 +47,7 @@ productsRouter.get("/products", requireAuth, requirePermission(MODULE, "view"), 
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(isNull(product.voidedAt), q ? ilike(product.name, `%${q}%`) : undefined);
     const [rows, countRows] = await Promise.all([
-      tx.select().from(product).where(where).orderBy(desc(product.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(product).where(where).orderBy(desc(product.createdAt), product.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(product).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

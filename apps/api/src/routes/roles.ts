@@ -58,7 +58,7 @@ rolesRouter.get("/roles", requireAuth, requirePermission(MODULE, "view"), async 
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(isNull(role.voidedAt), q ? ilike(role.name, `%${q}%`) : undefined);
     const [rows, countRows] = await Promise.all([
-      tx.select().from(role).where(where).orderBy(desc(role.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(role).where(where).orderBy(desc(role.createdAt), role.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(role).where(where),
     ]);
     const apiRows = await Promise.all(rows.map((r) => toApi(tx, r)));

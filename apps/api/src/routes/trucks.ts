@@ -49,7 +49,7 @@ trucksRouter.get("/trucks", requireAuth, requirePermission(MODULE, "view"), asyn
       branchId ? eq(truck.branchId, branchId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(truck).where(where).orderBy(desc(truck.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(truck).where(where).orderBy(desc(truck.createdAt), truck.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(truck).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

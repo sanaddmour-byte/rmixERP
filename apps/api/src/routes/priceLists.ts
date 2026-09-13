@@ -107,7 +107,7 @@ priceListsRouter.get("/price-lists", requireAuth, requirePermission(MODULE, "vie
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(isNull(priceList.voidedAt), q ? ilike(priceList.name, `%${q}%`) : undefined);
     const [rows, countRows] = await Promise.all([
-      tx.select().from(priceList).where(where).orderBy(desc(priceList.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(priceList).where(where).orderBy(desc(priceList.createdAt), priceList.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(priceList).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };
