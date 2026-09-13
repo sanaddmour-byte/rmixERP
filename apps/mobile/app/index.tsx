@@ -2,6 +2,7 @@ import * as React from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { useGetHealth } from "@rmixerp/contract";
+import type { Translations } from "@rmixerp/i18n";
 import { useLanguage } from "../src/i18n/LanguageContext";
 import { useModulePermissions } from "../src/lib/usePermissions";
 import { useCurrentUser } from "../src/lib/useCurrentUser";
@@ -25,15 +26,29 @@ const PRODUCTION_LINKS = [
   { module: "qc", href: "/qc" },
 ] as const;
 
+// Both gated on the same `deliveryOrders` permission module — a dispatcher
+// works the planner list, a driver works their own assigned-deliveries
+// list, so the label is overridden per link rather than derived from the
+// module name.
+const DISPATCH_LINKS = [
+  { module: "deliveryOrders", href: "/dispatch", labelKey: "dispatch" },
+  { module: "deliveryOrders", href: "/deliveries", labelKey: "myDeliveries" },
+] as const;
+
+type LinkModule =
+  | (typeof MASTER_DATA_LINKS)[number]["module"]
+  | (typeof SALES_LINKS)[number]["module"]
+  | (typeof PRODUCTION_LINKS)[number]["module"]
+  | (typeof DISPATCH_LINKS)[number]["module"];
+
 function MasterDataLink({
   module,
   href,
+  labelKey,
 }: {
-  module:
-    | (typeof MASTER_DATA_LINKS)[number]["module"]
-    | (typeof SALES_LINKS)[number]["module"]
-    | (typeof PRODUCTION_LINKS)[number]["module"];
+  module: LinkModule;
   href: string;
+  labelKey: keyof Translations["nav"];
 }) {
   const { t } = useLanguage();
   const router = useRouter();
@@ -42,7 +57,7 @@ function MasterDataLink({
 
   return (
     <Pressable onPress={() => router.push(href)} style={{ paddingVertical: 10 }}>
-      <Text style={{ color: colors.accent, fontSize: 15 }}>{t.nav[module]}</Text>
+      <Text style={{ color: colors.accent, fontSize: 15 }}>{t.nav[labelKey]}</Text>
     </Pressable>
   );
 }
@@ -93,19 +108,25 @@ export default function HealthScreen() {
 
           <View>
             {SALES_LINKS.map((link) => (
-              <MasterDataLink key={link.module} module={link.module} href={link.href} />
+              <MasterDataLink key={link.module} module={link.module} href={link.href} labelKey={link.module} />
             ))}
           </View>
 
           <View>
             {PRODUCTION_LINKS.map((link) => (
-              <MasterDataLink key={link.module} module={link.module} href={link.href} />
+              <MasterDataLink key={link.module} module={link.module} href={link.href} labelKey={link.module} />
+            ))}
+          </View>
+
+          <View>
+            {DISPATCH_LINKS.map((link) => (
+              <MasterDataLink key={link.href} module={link.module} href={link.href} labelKey={link.labelKey} />
             ))}
           </View>
 
           <View>
             {MASTER_DATA_LINKS.map((link) => (
-              <MasterDataLink key={link.module} module={link.module} href={link.href} />
+              <MasterDataLink key={link.module} module={link.module} href={link.href} labelKey={link.module} />
             ))}
           </View>
         </>

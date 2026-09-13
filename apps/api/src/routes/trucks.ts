@@ -1,84 +1,74 @@
 import { Router } from "express";
 import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
-import { project, withTenant, type Tx } from "@rmixerp/db";
-import { CreateProjectBody, UpdateProjectBody, VoidProjectBody, type Project } from "@rmixerp/contract";
+import { truck, withTenant, type Tx } from "@rmixerp/db";
+import { CreateTruckBody, UpdateTruckBody, VoidTruckBody, type Truck } from "@rmixerp/contract";
 import { db } from "../db";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requirePermission";
 import { parsePagination, paginatedBody } from "../lib/pagination";
-import { sendCsv } from "../lib/csv";
 import { notFound, validationError } from "../lib/errors";
 import { paramId, queryString } from "../lib/params";
 import { writeAudit } from "../audit";
 
-export const projectsRouter = Router();
-const MODULE = "projects";
+export const trucksRouter = Router();
+const MODULE = "trucks";
 
-type ProjectRow = typeof project.$inferSelect;
+type TruckRow = typeof truck.$inferSelect;
 
-function toApi(row: ProjectRow): Project {
+function toApi(row: TruckRow): Truck {
   return {
     id: row.id,
     companyId: row.companyId,
     branchId: row.branchId,
-    customerId: row.customerId,
-    name: row.name,
-    address: row.address,
+    plateNumber: row.plateNumber,
+    capacityM3: row.capacityM3,
+    isActive: row.isActive,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     voidedAt: row.voidedAt?.toISOString() ?? null,
   };
 }
 
-async function findActive(tx: Tx, id: string): Promise<ProjectRow | undefined> {
+async function findActive(tx: Tx, id: string): Promise<TruckRow | undefined> {
   const [row] = await tx
     .select()
-    .from(project)
-    .where(and(eq(project.id, id), isNull(project.voidedAt)));
+    .from(truck)
+    .where(and(eq(truck.id, id), isNull(truck.voidedAt)));
   return row;
 }
 
-projectsRouter.get("/projects", requireAuth, requirePermission(MODULE, "view"), async (req, res) => {
+trucksRouter.get("/trucks", requireAuth, requirePermission(MODULE, "view"), async (req, res) => {
   const pagination = parsePagination(req);
   const q = queryString(req, "q");
-  const customerId = queryString(req, "customerId");
+  const branchId = queryString(req, "branchId");
 
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(
-      isNull(project.voidedAt),
-      q ? ilike(project.name, `%${q}%`) : undefined,
-      customerId ? eq(project.customerId, customerId) : undefined,
+      isNull(truck.voidedAt),
+      q ? ilike(truck.plateNumber, `%${q}%`) : undefined,
+      branchId ? eq(truck.branchId, branchId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(project).where(where).orderBy(desc(project.createdAt), project.id).limit(pagination.limit).offset(pagination.offset),
-      tx.select({ count: sql<number>`count(*)::int` }).from(project).where(where),
+      tx.select().from(truck).where(where).orderBy(desc(truck.createdAt), truck.id).limit(pagination.limit).offset(pagination.offset),
+      tx.select({ count: sql<number>`count(*)::int` }).from(truck).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };
   });
 
-  if (queryString(req, "format") === "csv") {
-    sendCsv(res, "projects.csv", items.map(toApi), [
-      { key: "id", header: "ID" },
-      { key: "name", header: "Name" },
-      { key: "customerId", header: "Customer ID" },
-      { key: "address", header: "Address" },
-    ]);
-    return;
-  }
   res.status(200).json(paginatedBody(items.map(toApi), total, pagination));
 });
 
-projectsRouter.get("/projects/:id", requireAuth, requirePermission(MODULE, "view"), async (req, res) => {
+trucksRouter.get("/trucks/:id", requireAuth, requirePermission(MODULE, "view"), async (req, res) => {
   const row = await withTenant(db, req.auth!.companyId, (tx) => findActive(tx, paramId(req)));
   if (!row) {
-    res.status(404).json(notFound("Project"));
+    res.status(404).json(notFound("Truck"));
     return;
   }
   res.status(200).json(toApi(row));
 });
 
-projectsRouter.post("/projects", requireAuth, requirePermission(MODULE, "create"), async (req, res) => {
-  const parsed = CreateProjectBody.safeParse(req.body);
+trucksRouter.post("/trucks", requireAuth, requirePermission(MODULE, "create"), async (req, res) => {
+  const parsed = CreateTruckBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json(validationError(parsed.error.flatten()));
     return;
@@ -87,21 +77,22 @@ projectsRouter.post("/projects", requireAuth, requirePermission(MODULE, "create"
 
   const created = await withTenant(db, req.auth!.companyId, async (tx) => {
     const [row] = await tx
-      .insert(project)
+      .insert(truck)
       .values({
         companyId: req.auth!.companyId,
-        branchId: input.branchId ?? null,
-        customerId: input.customerId,
-        name: input.name,
-        address: input.address ?? null,
+        branchId: input.branchId,
+        plateNumber: input.plateNumber,
+        capacityM3: input.capacityM3 ?? null,
+        isActive: input.isActive ?? true,
         createdBy: req.auth!.userId,
       })
       .returning();
     if (!row) throw new Error("insert returned no row");
     await writeAudit(tx, {
       companyId: req.auth!.companyId,
+      branchId: input.branchId,
       actorUserId: req.auth!.userId,
-      entityType: "project",
+      entityType: "truck",
       entityId: row.id,
       action: "create",
       after: row,
@@ -112,8 +103,8 @@ projectsRouter.post("/projects", requireAuth, requirePermission(MODULE, "create"
   res.status(201).json(toApi(created));
 });
 
-projectsRouter.put("/projects/:id", requireAuth, requirePermission(MODULE, "edit"), async (req, res) => {
-  const parsed = UpdateProjectBody.safeParse(req.body);
+trucksRouter.put("/trucks/:id", requireAuth, requirePermission(MODULE, "edit"), async (req, res) => {
+  const parsed = UpdateTruckBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json(validationError(parsed.error.flatten()));
     return;
@@ -126,20 +117,21 @@ projectsRouter.put("/projects/:id", requireAuth, requirePermission(MODULE, "edit
     if (!before) return null;
 
     const [row] = await tx
-      .update(project)
+      .update(truck)
       .set({
         ...(input.branchId !== undefined && { branchId: input.branchId }),
-        ...(input.name !== undefined && { name: input.name }),
-        ...(input.address !== undefined && { address: input.address }),
+        ...(input.plateNumber !== undefined && { plateNumber: input.plateNumber }),
+        ...(input.capacityM3 !== undefined && { capacityM3: input.capacityM3 }),
+        ...(input.isActive !== undefined && { isActive: input.isActive }),
         updatedAt: new Date(),
       })
-      .where(eq(project.id, id))
+      .where(eq(truck.id, id))
       .returning();
     if (!row) throw new Error("update returned no row");
     await writeAudit(tx, {
       companyId: req.auth!.companyId,
       actorUserId: req.auth!.userId,
-      entityType: "project",
+      entityType: "truck",
       entityId: row.id,
       action: "update",
       before,
@@ -149,14 +141,14 @@ projectsRouter.put("/projects/:id", requireAuth, requirePermission(MODULE, "edit
   });
 
   if (!updated) {
-    res.status(404).json(notFound("Project"));
+    res.status(404).json(notFound("Truck"));
     return;
   }
   res.status(200).json(toApi(updated));
 });
 
-projectsRouter.delete("/projects/:id", requireAuth, requirePermission(MODULE, "void"), async (req, res) => {
-  const parsed = VoidProjectBody.safeParse(req.body ?? {});
+trucksRouter.delete("/trucks/:id", requireAuth, requirePermission(MODULE, "void"), async (req, res) => {
+  const parsed = VoidTruckBody.safeParse(req.body ?? {});
   const reason = parsed.success ? (parsed.data.reason ?? null) : null;
   const id = paramId(req);
 
@@ -164,12 +156,12 @@ projectsRouter.delete("/projects/:id", requireAuth, requirePermission(MODULE, "v
     const before = await findActive(tx, id);
     if (!before) return null;
 
-    const [row] = await tx.update(project).set({ voidedAt: new Date() }).where(eq(project.id, id)).returning();
+    const [row] = await tx.update(truck).set({ voidedAt: new Date() }).where(eq(truck.id, id)).returning();
     if (!row) throw new Error("void returned no row");
     await writeAudit(tx, {
       companyId: req.auth!.companyId,
       actorUserId: req.auth!.userId,
-      entityType: "project",
+      entityType: "truck",
       entityId: row.id,
       action: "void",
       before,
@@ -180,7 +172,7 @@ projectsRouter.delete("/projects/:id", requireAuth, requirePermission(MODULE, "v
   });
 
   if (!voided) {
-    res.status(404).json(notFound("Project"));
+    res.status(404).json(notFound("Truck"));
     return;
   }
   res.status(204).send();

@@ -1,10 +1,12 @@
 import { Router } from "express";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
   batchRecord,
+  deliveryOrder,
   materialConsumption,
   mixDesignIngredient,
   productionOrder,
+  proofOfDelivery,
   returnedConcrete,
   stockBalance,
   withTenant,
@@ -156,7 +158,7 @@ productionOrdersRouter.get("/production-orders", requireAuth, requirePermission(
       branchId ? eq(productionOrder.branchId, branchId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(productionOrder).where(where).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(productionOrder).where(where).orderBy(desc(productionOrder.createdAt), productionOrder.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(productionOrder).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };
@@ -624,7 +626,20 @@ productionOrdersRouter.get(
       const batchedM3Milli = batches.reduce((sum, b) => sum + decimalStringToMilliUnits(b.actualQuantityM3), 0n);
       const returnedM3Milli = returns.reduce((sum, r) => sum + decimalStringToMilliUnits(r.quantityM3), 0n);
 
-      return computeYieldVariance({ batchedM3Milli, returnedM3Milli, deliveredM3Milli: null });
+      // Delivered m3 comes from this production order's delivered/invoiced
+      // delivery orders' proof-of-delivery received quantity (Phase 5). Null
+      // (unknown, not zero) until at least one delivery has actually landed.
+      const deliveries = await tx
+        .select({ receivedQuantityM3: proofOfDelivery.receivedQuantityM3 })
+        .from(deliveryOrder)
+        .innerJoin(proofOfDelivery, eq(proofOfDelivery.deliveryOrderId, deliveryOrder.id))
+        .where(and(eq(deliveryOrder.productionOrderId, id), inArray(deliveryOrder.status, ["delivered", "invoiced"])));
+      const deliveredM3Milli =
+        deliveries.length > 0
+          ? deliveries.reduce((sum, d) => sum + decimalStringToMilliUnits(d.receivedQuantityM3), 0n)
+          : null;
+
+      return computeYieldVariance({ batchedM3Milli, returnedM3Milli, deliveredM3Milli });
     });
 
     if (!result) {

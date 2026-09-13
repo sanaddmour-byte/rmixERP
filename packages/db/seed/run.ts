@@ -42,6 +42,9 @@ const PERMISSION_MODULES = [
   "inventory",
   "productionOrders",
   "qc",
+  "trucks",
+  "drivers",
+  "deliveryOrders",
 ] as const;
 const PERMISSION_ACTIONS = ["view", "create", "edit", "approve", "void"] as const;
 
