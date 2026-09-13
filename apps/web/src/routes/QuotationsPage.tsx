@@ -98,7 +98,7 @@ function QuotationDetail({ quotationId, onConverted }: { quotationId: string; on
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-4 text-sm text-navy-600">
+        <div className="flex flex-wrap gap-4 text-sm text-navy-600 dark:text-navy-300">
           <span>Subtotal: {q.subtotalJod} JOD</span>
           <span>Tax: {q.taxJod} JOD</span>
           <span className="font-semibold">Total: {q.totalJod} JOD</span>
@@ -144,7 +144,7 @@ function QuotationDetail({ quotationId, onConverted }: { quotationId: string; on
 
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-navy-200 text-left text-navy-500">
+            <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
               <th className="py-2 pe-4 font-medium">Product</th>
               <th className="py-2 pe-4 font-medium">Qty (m³)</th>
               <th className="py-2 pe-4 font-medium">Concrete</th>
@@ -158,7 +158,7 @@ function QuotationDetail({ quotationId, onConverted }: { quotationId: string; on
           <tbody>
             {q.lines.map((line) => (
               <React.Fragment key={line.id}>
-                <tr className="border-b border-navy-100">
+                <tr className="border-b border-navy-100 dark:border-navy-800">
                   <td className="py-2 pe-4">{productOptions.find((p) => p.id === line.productId)?.name ?? line.productId}</td>
                   <td className="py-2 pe-4">{line.quantityM3}</td>
                   <td className="py-2 pe-4">{line.concreteUnitPriceJod}</td>
@@ -185,7 +185,7 @@ function QuotationDetail({ quotationId, onConverted }: { quotationId: string; on
                   </td>
                 </tr>
                 {line.charges.map((charge) => (
-                  <tr key={charge.id} className="border-b border-navy-100 text-xs text-navy-500">
+                  <tr key={charge.id} className="border-b border-navy-100 dark:border-navy-800 text-xs text-navy-500">
                     <td className="py-1 ps-4" colSpan={4}>
                       {chargeTypeOptions.find((c) => c.id === charge.chargeTypeId)?.name ?? charge.chargeTypeId}
                     </td>
@@ -207,13 +207,13 @@ function QuotationDetail({ quotationId, onConverted }: { quotationId: string; on
                   </tr>
                 ))}
                 {chargeLineId === line.id && (
-                  <tr className="border-b border-navy-100">
+                  <tr className="border-b border-navy-100 dark:border-navy-800">
                     <td colSpan={8} className="py-2">
                       <form onSubmit={handleAddCharge} className="flex flex-wrap items-end gap-2">
                         <label className="flex flex-col gap-1 text-xs">
                           Charge type
                           <select
-                            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm"
+                            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                             required
                             value={chargeTypeId}
                             onChange={(e) => setChargeTypeId(e.target.value)}
@@ -252,7 +252,7 @@ function QuotationDetail({ quotationId, onConverted }: { quotationId: string; on
             <label className="flex flex-col gap-1 text-xs">
               Product
               <select
-                className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+                className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                 required
                 value={productId}
                 onChange={(e) => setProductId(e.target.value)}
@@ -346,7 +346,7 @@ export function QuotationsPage() {
               <label className="flex flex-col gap-1 text-xs">
                 Customer
                 <select
-                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                   required
                   value={customerId}
                   onChange={(e) => setCustomerId(e.target.value)}
@@ -364,7 +364,7 @@ export function QuotationsPage() {
               <label className="flex flex-col gap-1 text-xs">
                 Branch
                 <select
-                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                   required
                   value={branchId}
                   onChange={(e) => setBranchId(e.target.value)}
@@ -382,7 +382,7 @@ export function QuotationsPage() {
               <label className="flex flex-col gap-1 text-xs">
                 Project (optional)
                 <select
-                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                   value={projectId}
                   onChange={(e) => setProjectId(e.target.value)}
                 >
@@ -414,7 +414,7 @@ export function QuotationsPage() {
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Quotations</CardTitle>
           <select
-            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm"
+            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
             value={status}
             onChange={(e) => {
               setStatus(e.target.value as QuotationStatus | "");
@@ -433,7 +433,7 @@ export function QuotationsPage() {
         <CardContent className="space-y-4">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-navy-200 text-left text-navy-500">
+              <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
                 <th className="py-2 pe-4 font-medium">Status</th>
                 <th className="py-2 pe-4 font-medium">Customer</th>
                 <th className="py-2 pe-4 font-medium">Total (JOD)</th>
@@ -443,14 +443,14 @@ export function QuotationsPage() {
             <tbody>
               {list.isLoading && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-navy-400">
+                  <td colSpan={4} className="py-4 text-center text-navy-400 dark:text-navy-500">
                     Loading…
                   </td>
                 </tr>
               )}
               {!list.isLoading && (body?.items.length ?? 0) === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-navy-400">
+                  <td colSpan={4} className="py-4 text-center text-navy-400 dark:text-navy-500">
                     No records yet.
                   </td>
                 </tr>
@@ -458,7 +458,7 @@ export function QuotationsPage() {
               {body?.items.map((row) => (
                 <tr
                   key={row.id}
-                  className="cursor-pointer border-b border-navy-100 hover:bg-navy-50"
+                  className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800"
                   onClick={() => setSelectedId(row.id)}
                 >
                   <td className="py-2 pe-4 capitalize">{row.status}</td>
@@ -469,7 +469,7 @@ export function QuotationsPage() {
               ))}
             </tbody>
           </table>
-          <div className="flex items-center justify-between text-sm text-navy-500">
+          <div className="flex items-center justify-between text-sm text-navy-500 dark:text-navy-400">
             <span>
               Page {page} of {totalPages} ({body?.total ?? 0} total)
             </span>

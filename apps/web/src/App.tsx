@@ -1,7 +1,7 @@
-import { Link, Route, Switch, useLocation } from "wouter";
-import type { Translations } from "@rmixerp/i18n";
-import { Button } from "@rmixerp/ui";
-import { useLanguage } from "./i18n/LanguageContext";
+import { Route, Switch } from "wouter";
+import { Sidebar } from "./components/Sidebar";
+import { HomePage } from "./routes/HomePage";
+import { ReportsPage } from "./routes/ReportsPage";
 import { HealthPage } from "./routes/HealthPage";
 import { LoginPage } from "./routes/LoginPage";
 import { CompanyPage } from "./routes/CompanyPage";
@@ -26,103 +26,19 @@ import { DriversPage } from "./routes/DriversPage";
 import { DispatchPage } from "./routes/DispatchPage";
 import { InvoicesPage } from "./routes/InvoicesPage";
 import { ClearanceQueuePage } from "./routes/ClearanceQueuePage";
-import { clearSession, getAccessToken } from "./lib/session";
-import { useCurrentUser } from "./lib/useCurrentUser";
-
-const MASTER_DATA_LINKS: { href: string; labelKey: keyof Translations["nav"] }[] = [
-  { href: "/company", labelKey: "company" },
-  { href: "/branches", labelKey: "branches" },
-  { href: "/users", labelKey: "users" },
-  { href: "/roles", labelKey: "roles" },
-  { href: "/customers", labelKey: "customers" },
-  { href: "/projects", labelKey: "projects" },
-  { href: "/products", labelKey: "products" },
-  { href: "/price-lists", labelKey: "priceLists" },
-  { href: "/charge-types", labelKey: "chargeTypes" },
-  { href: "/raw-materials", labelKey: "rawMaterials" },
-  { href: "/vendors", labelKey: "vendors" },
-  { href: "/quotations", labelKey: "quotations" },
-  { href: "/sales-orders", labelKey: "salesOrders" },
-  { href: "/mix-designs", labelKey: "mixDesigns" },
-  { href: "/inventory", labelKey: "inventory" },
-  { href: "/production-orders", labelKey: "productionOrders" },
-  { href: "/qc", labelKey: "qc" },
-  { href: "/trucks", labelKey: "trucks" },
-  { href: "/drivers", labelKey: "drivers" },
-  { href: "/dispatch", labelKey: "dispatch" },
-  { href: "/invoices", labelKey: "invoices" },
-  { href: "/clearance-queue", labelKey: "clearanceQueue" },
-];
-
-function Nav() {
-  const { t, toggleLocale } = useLanguage();
-  const [, navigate] = useLocation();
-  const { data: currentUser } = useCurrentUser();
-  const signedIn = Boolean(getAccessToken()) && currentUser?.status === 200;
-
-  function handleLogout() {
-    clearSession();
-    navigate("/login");
-  }
-
-  return (
-    <nav className="bg-navy-900">
-      <div className="flex items-center justify-between px-6 py-3">
-        <span className="font-semibold text-white">
-          {t.appName}
-          <span className="text-orange-400">.</span>
-        </span>
-        <div className="flex items-center gap-4 text-sm text-navy-100">
-          <Link href="/" className="hover:text-orange-400">
-            {t.nav.health}
-          </Link>
-          {signedIn && currentUser?.status === 200 ? (
-            <>
-              <span className="text-navy-300">{t.login.loggedInAs(currentUser.data.displayName)}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-navy-600 bg-transparent text-white hover:bg-navy-800"
-                onClick={handleLogout}
-              >
-                {t.login.logout}
-              </Button>
-            </>
-          ) : (
-            <Link href="/login" className="hover:text-orange-400">
-              {t.nav.login}
-            </Link>
-          )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-navy-100 hover:bg-navy-800 hover:text-orange-400"
-            onClick={toggleLocale}
-          >
-            {t.languageToggle}
-          </Button>
-        </div>
-      </div>
-      {signedIn && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-navy-700 bg-navy-800 px-6 py-2 text-xs text-navy-200">
-          {MASTER_DATA_LINKS.map((link) => (
-            <Link key={link.href} href={link.href} className="hover:text-orange-400">
-              {t.nav[link.labelKey]}
-            </Link>
-          ))}
-        </div>
-      )}
-    </nav>
-  );
-}
+import { CollectionsPage } from "./routes/CollectionsPage";
+import { PostDatedChequesPage } from "./routes/PostDatedChequesPage";
+import { ReceivablesReportsPage } from "./routes/ReceivablesReportsPage";
 
 export function App() {
   return (
-    <div className="min-h-screen bg-navy-50">
-      <Nav />
-      <main className="p-6">
+    <div className="flex min-h-screen bg-navy-50 text-navy-900 dark:bg-navy-950 dark:text-navy-100">
+      <Sidebar />
+      <main className="min-w-0 flex-1 p-6">
         <Switch>
           <Route path="/login" component={LoginPage} />
+          <Route path="/health" component={HealthPage} />
+          <Route path="/reports" component={ReportsPage} />
           <Route path="/company" component={CompanyPage} />
           <Route path="/branches" component={BranchesPage} />
           <Route path="/users" component={UsersPage} />
@@ -145,7 +61,10 @@ export function App() {
           <Route path="/dispatch" component={DispatchPage} />
           <Route path="/invoices" component={InvoicesPage} />
           <Route path="/clearance-queue" component={ClearanceQueuePage} />
-          <Route path="/" component={HealthPage} />
+          <Route path="/collections" component={CollectionsPage} />
+          <Route path="/post-dated-cheques" component={PostDatedChequesPage} />
+          <Route path="/receivables-reports" component={ReceivablesReportsPage} />
+          <Route path="/" component={HomePage} />
         </Switch>
       </main>
     </div>

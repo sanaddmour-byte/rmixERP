@@ -74,6 +74,7 @@ function invoiceToApi(row: InvoiceRow): Invoice {
     invoiceNumber: row.invoiceNumber,
     status: row.status,
     invoicedAt: row.invoicedAt.toISOString(),
+    dueDate: row.dueDate?.toISOString() ?? null,
     relatedInvoiceId: row.relatedInvoiceId,
     subtotalJod: filsToJodString(fils(row.subtotalFils)),
     taxJod: filsToJodString(fils(row.taxFils)),
@@ -164,12 +165,16 @@ export async function loadInvoiceDetail(tx: Tx, id: string): Promise<InvoiceDeta
  * an obvious extension of the same documented invoice-numbering scheme,
  * not a separately guessed format). SEQ is atomically allocated in the
  * same transaction as the document (DOMAIN.md/PLAN.md's gapless rule).
+ * Reused by Phase 8's receivables routes for receipt numbering
+ * ("RCP"/"TRF"/"PDC" docTypes) — the same gapless-per-(branch,docType,
+ * yearMonth) counter table works for any document series, not just
+ * invoicing's own three.
  */
-async function allocateDocumentNumber(
+export async function allocateDocumentNumber(
   tx: Tx,
   companyId: string,
   branchId: string,
-  docType: "invoice" | "credit_note" | "debit_note",
+  docType: "invoice" | "credit_note" | "debit_note" | "RCP" | "TRF" | "PDC",
   displayPrefix: string,
 ): Promise<string> {
   const now = new Date();

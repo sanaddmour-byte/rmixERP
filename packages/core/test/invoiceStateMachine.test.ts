@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assertInvoiceTransition, canTransitionInvoice, INVOICE_STATUSES } from "../src/invoiceStateMachine";
+import { assertInvoiceTransition, canTransitionInvoice } from "../src/invoiceStateMachine";
 
 describe("invoice state machine", () => {
   it("allows the happy path draft -> pending_clearance -> cleared -> issued -> paid", () => {
@@ -25,10 +25,15 @@ describe("invoice state machine", () => {
     expect(canTransitionInvoice("pending_clearance", "issued")).toBe(false);
   });
 
-  it("rejects any transition out of the terminal paid state", () => {
-    for (const status of INVOICE_STATUSES) {
-      expect(canTransitionInvoice("paid", status)).toBe(false);
-    }
+  it("allows a bounced-cheque/reversed-allocation reopen from paid back to partially_paid or issued", () => {
+    expect(canTransitionInvoice("paid", "partially_paid")).toBe(true);
+    expect(canTransitionInvoice("paid", "issued")).toBe(true);
+    expect(canTransitionInvoice("paid", "draft")).toBe(false);
+    expect(canTransitionInvoice("paid", "cleared")).toBe(false);
+  });
+
+  it("allows a reopen from partially_paid back to issued if its allocation is fully unwound", () => {
+    expect(canTransitionInvoice("partially_paid", "issued")).toBe(true);
   });
 
   it("rejects a direct rejected -> pending_clearance resubmission (must go through draft)", () => {

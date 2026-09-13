@@ -43,7 +43,7 @@ function ResourceForm({ fields, initialValues, onSubmit, onCancel, pending, erro
           {field.label}
           {field.type === "select" ? (
             <select
-              className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+              className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
               required={field.required}
               value={typeof values[field.name] === "string" ? (values[field.name] as string) : ""}
               onChange={(e) => setValues((v) => ({ ...v, [field.name]: e.target.value }))}
@@ -64,7 +64,7 @@ function ResourceForm({ fields, initialValues, onSubmit, onCancel, pending, erro
               onChange={(e) => setValues((v) => ({ ...v, [field.name]: e.target.checked }))}
             />
           ) : field.type === "multiselect" ? (
-            <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-md border border-navy-200 p-2">
+            <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-md border border-navy-200 p-2 dark:border-navy-700">
               {field.options?.map((opt) => {
                 const selected = Array.isArray(values[field.name]) ? (values[field.name] as string[]) : [];
                 const checked = selected.includes(opt.value);
@@ -192,7 +192,7 @@ export function ResourceListPage<T extends { id: string }>({
         />
 
         {showCreate && (
-          <Card className="border-navy-300">
+          <Card className="border-navy-300 dark:border-navy-600">
             <ResourceForm
               fields={createFields}
               onSubmit={(values) => {
@@ -208,7 +208,7 @@ export function ResourceListPage<T extends { id: string }>({
         )}
 
         {editingRow && editFields && onUpdate && (
-          <Card className="border-navy-300">
+          <Card className="border-navy-300 dark:border-navy-600">
             <ResourceForm
               fields={editFields}
               initialValues={editFields.reduce<FormValues>((acc, f) => {
@@ -234,7 +234,7 @@ export function ResourceListPage<T extends { id: string }>({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-navy-200 text-left text-navy-500">
+              <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
                 {columns.map((col) => (
                   <th key={String(col.key)} className="py-2 pe-4 font-medium">
                     {col.header}
@@ -246,20 +246,20 @@ export function ResourceListPage<T extends { id: string }>({
             <tbody>
               {isLoading && (
                 <tr>
-                  <td colSpan={columns.length + 1} className="py-4 text-center text-navy-400">
+                  <td colSpan={columns.length + 1} className="py-4 text-center text-navy-400 dark:text-navy-500">
                     {t.resource.loading}
                   </td>
                 </tr>
               )}
               {!isLoading && items.length === 0 && (
                 <tr>
-                  <td colSpan={columns.length + 1} className="py-4 text-center text-navy-400">
+                  <td colSpan={columns.length + 1} className="py-4 text-center text-navy-400 dark:text-navy-500">
                     {t.resource.empty}
                   </td>
                 </tr>
               )}
               {items.map((row) => (
-                <tr key={row.id} className="border-b border-navy-100">
+                <tr key={row.id} className="border-b border-navy-100 dark:border-navy-800">
                   {columns.map((col) => (
                     <td key={String(col.key)} className="py-2 pe-4">
                       {col.render ? col.render(row) : String(row[col.key] ?? "")}
@@ -285,7 +285,7 @@ export function ResourceListPage<T extends { id: string }>({
           </table>
         </div>
 
-        <div className="flex items-center justify-between text-sm text-navy-500">
+        <div className="flex items-center justify-between text-sm text-navy-500 dark:text-navy-400">
           <span>{t.resource.pageOf(page, totalPages, total)}</span>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>

@@ -44,7 +44,7 @@ function MixDesignIngredients({ mixDesignId }: { mixDesignId: string }) {
       <CardContent className="space-y-4">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-navy-200 text-left text-navy-500">
+            <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
               <th className="py-2 pe-4 font-medium">Raw Material</th>
               <th className="py-2 pe-4 font-medium">Qty per m³</th>
               <th className="py-2" />
@@ -52,7 +52,7 @@ function MixDesignIngredients({ mixDesignId }: { mixDesignId: string }) {
           </thead>
           <tbody>
             {ingredients.map((ing) => (
-              <tr key={ing.id} className="border-b border-navy-100">
+              <tr key={ing.id} className="border-b border-navy-100 dark:border-navy-800">
                 <td className="py-2 pe-4">{materialOptions.find((m) => m.id === ing.rawMaterialId)?.name ?? ing.rawMaterialId}</td>
                 <td className="py-2 pe-4">{ing.quantityPerM3}</td>
                 <td className="py-2 text-end">
@@ -74,7 +74,7 @@ function MixDesignIngredients({ mixDesignId }: { mixDesignId: string }) {
           <label className="flex flex-col gap-1 text-xs">
             Raw material
             <select
-              className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+              className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
               required
               value={rawMaterialId}
               onChange={(e) => setRawMaterialId(e.target.value)}
@@ -185,7 +185,7 @@ export function MixDesignsPage() {
         <label className="flex flex-col gap-1 text-sm">
           Manage ingredients for
           <select
-            className="h-10 max-w-sm rounded-md border border-navy-300 bg-white px-3 text-sm"
+            className="h-10 max-w-sm rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
             value={selectedId ?? ""}
             onChange={(e) => setSelectedId(e.target.value || null)}
           >

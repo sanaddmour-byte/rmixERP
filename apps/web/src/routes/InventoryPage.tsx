@@ -59,7 +59,7 @@ export function InventoryPage() {
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Stock Balances</CardTitle>
           <select
-            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm"
+            className="h-9 rounded-md border border-navy-300 bg-white px-2 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
             value={branchId}
             onChange={(e) => setBranchId(e.target.value)}
           >
@@ -74,7 +74,7 @@ export function InventoryPage() {
         <CardContent>
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-navy-200 text-left text-navy-500">
+              <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
                 <th className="py-2 pe-4 font-medium">Branch</th>
                 <th className="py-2 pe-4 font-medium">Raw Material</th>
                 <th className="py-2 pe-4 font-medium">Qty on Hand</th>
@@ -84,20 +84,20 @@ export function InventoryPage() {
             <tbody>
               {balances.isLoading && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-navy-400">
+                  <td colSpan={4} className="py-4 text-center text-navy-400 dark:text-navy-500">
                     Loading…
                   </td>
                 </tr>
               )}
               {!balances.isLoading && (balanceBody?.items.length ?? 0) === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-navy-400">
+                  <td colSpan={4} className="py-4 text-center text-navy-400 dark:text-navy-500">
                     No records yet.
                   </td>
                 </tr>
               )}
               {balanceBody?.items.map((row) => (
-                <tr key={row.id} className="border-b border-navy-100">
+                <tr key={row.id} className="border-b border-navy-100 dark:border-navy-800">
                   <td className="py-2 pe-4">{branchOptions.find((b) => b.id === row.branchId)?.name ?? row.branchId}</td>
                   <td className="py-2 pe-4">{materialOptions.find((m) => m.id === row.rawMaterialId)?.name ?? row.rawMaterialId}</td>
                   <td className="py-2 pe-4">{row.quantityOnHand}</td>
@@ -119,7 +119,7 @@ export function InventoryPage() {
               <label className="flex flex-col gap-1 text-xs">
                 Branch
                 <select
-                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                   required
                   value={adjBranchId}
                   onChange={(e) => setAdjBranchId(e.target.value)}
@@ -137,7 +137,7 @@ export function InventoryPage() {
               <label className="flex flex-col gap-1 text-xs">
                 Raw material
                 <select
-                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm"
+                  className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
                   required
                   value={adjRawMaterialId}
                   onChange={(e) => setAdjRawMaterialId(e.target.value)}
@@ -179,7 +179,7 @@ export function InventoryPage() {
         <CardContent>
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-navy-200 text-left text-navy-500">
+              <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
                 <th className="py-2 pe-4 font-medium">Raw Material</th>
                 <th className="py-2 pe-4 font-medium">Delta</th>
                 <th className="py-2 pe-4 font-medium">Unit Cost</th>
@@ -190,7 +190,7 @@ export function InventoryPage() {
             </thead>
             <tbody>
               {adjustmentBody?.items.map((row) => (
-                <tr key={row.id} className="border-b border-navy-100">
+                <tr key={row.id} className="border-b border-navy-100 dark:border-navy-800">
                   <td className="py-2 pe-4">{materialOptions.find((m) => m.id === row.rawMaterialId)?.name ?? row.rawMaterialId}</td>
                   <td className="py-2 pe-4">{row.quantityDelta}</td>
                   <td className="py-2 pe-4">{row.unitCostJod ?? "—"}</td>

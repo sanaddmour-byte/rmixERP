@@ -23,3 +23,4 @@ export * from "./fleet";
 export * from "./delivery";
 export * from "./invoice";
 export * from "./idempotency";
+export * from "./receivables";

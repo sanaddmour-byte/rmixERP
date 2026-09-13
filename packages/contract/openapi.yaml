@@ -41,6 +41,7 @@ tags:
   - name: deliveryOrders
   - name: invoices
   - name: clearance
+  - name: receivables
 
 paths:
   /health:
@@ -2994,6 +2995,293 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /collections:
+    post:
+      operationId: createCollection
+      tags: [receivables]
+      summary: >
+        Record a collection (cash/bank transfer/post-dated cheque) and
+        allocate it across open invoices immediately, either automatically
+        FIFO by due date (DOMAIN.md Invariant 7) or via an explicit manual
+        plan — invoice status reflects the allocation right away for every
+        method, including post-dated cheques. `method: post_dated_cheque`
+        additionally requires bankName/chequeNumber/chequeDueDate and
+        creates a linked PostDatedCheque row in `pending` status, tracked
+        through deposit/clear separately; if it later bounces
+        (`/post-dated-cheques/{id}/bounce`) or is cancelled while still
+        pending, its allocation is unwound and the invoice(s) it applied
+        to are reopened — DOMAIN.md's "unwinding allocations" language
+        only makes sense if the allocation existed before the bounce, so
+        that is when it's created, not deferred to clearing.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCollectionRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CollectionDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+    get:
+      operationId: listCollections
+      tags: [receivables]
+      summary: List collections.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: customerId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: method
+          in: query
+          schema: { type: string, enum: [cash, bank_transfer, post_dated_cheque] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CollectionListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /collections/{id}:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    get:
+      operationId: getCollection
+      tags: [receivables]
+      summary: Get a collection (with its allocations and any linked post-dated cheque) by id.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CollectionDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /post-dated-cheques:
+    get:
+      operationId: listPostDatedCheques
+      tags: [receivables]
+      summary: List post-dated cheques (the PDC aging/tracking view).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, deposited, cleared, bounced, cancelled] }
+        - name: customerId
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PostDatedChequeListResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /post-dated-cheques/{id}/deposit:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: depositPostDatedCheque
+      tags: [receivables]
+      summary: Mark a pending cheque as deposited at the bank.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PostDatedCheque" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /post-dated-cheques/{id}/clear:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: clearPostDatedCheque
+      tags: [receivables]
+      summary: Mark a deposited cheque as cleared — a status confirmation only; its allocation was already applied when the collection was recorded.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PostDatedCheque" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /post-dated-cheques/{id}/bounce:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: bouncePostDatedCheque
+      tags: [receivables]
+      summary: >
+        Mark a deposited cheque as bounced — unwinds its allocation
+        (voiding the allocation rows, reopening any invoice they were
+        applied to back down through the invoice state machine) and hits
+        the customer's credit standing, all in one transaction with an
+        audit entry.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BouncePostDatedChequeRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PostDatedCheque" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /post-dated-cheques/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: cancelPostDatedCheque
+      tags: [receivables]
+      summary: Cancel a still-pending cheque (never deposited) — unwinds its allocation the same way a bounce does, since the allocation was already applied when the collection was recorded.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PostDatedCheque" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /reports/customer-statement:
+    get:
+      operationId: getCustomerStatement
+      tags: [receivables]
+      summary: >
+        A customer statement — issued invoices and collections in date
+        order with a running balance. `customerId` is a query parameter
+        (not a path parameter) here specifically to keep this alongside
+        the other /reports/* endpoints and avoid a generated-type name
+        collision between orval's path-param and query-param naming for
+        operations that would otherwise combine both.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: customerId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerStatementResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /reports/aging:
+    get:
+      operationId: getAgingReport
+      tags: [receivables]
+      summary: Accounts-receivable aging report, bucketed by days past the invoice due date, per customer.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: asOf
+          in: query
+          schema: { type: string, format: date-time }
+        - name: format
+          in: query
+          schema: { type: string, enum: [json, csv] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AgingReportResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /reports/credit-control:
+    get:
+      operationId: getCreditControlDashboard
+      tags: [receivables]
+      summary: Customers ranked by credit-limit utilization — the credit-control dashboard.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreditControlResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /reports/credit-overrides:
+    get:
+      operationId: getCreditOverridesReport
+      tags: [receivables]
+      summary: Every credit-block override across sales orders and delivery orders (filterable, exportable, with totals by user).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: userId
+          in: query
+          schema: { type: string, format: uuid }
+        - name: format
+          in: query
+          schema: { type: string, enum: [json, csv] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreditOverridesReportResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -4391,7 +4679,7 @@ components:
         - $ref: "#/components/schemas/ClearanceFields"
         - type: object
           required:
-            [id, companyId, branchId, customerId, invoiceNumber, status, invoicedAt, relatedInvoiceId, subtotalJod,
+            [id, companyId, branchId, customerId, invoiceNumber, status, invoicedAt, dueDate, relatedInvoiceId, subtotalJod,
              taxJod, totalJod, notes, createdAt, updatedAt, voidedAt]
           properties:
             id: { type: string, format: uuid }
@@ -4401,6 +4689,7 @@ components:
             invoiceNumber: { type: string, description: "Gapless {BRANCH}-{YYMM}-{SEQ}, allocated in the same transaction as the invoice." }
             status: { type: string, enum: [draft, pending_clearance, cleared, issued, partially_paid, paid, rejected] }
             invoicedAt: { type: string, format: date-time }
+            dueDate: { type: string, format: date-time, nullable: true, description: "Set once at issue time from the customer's payment terms as of that moment; null until issued." }
             relatedInvoiceId:
               type: string
               format: uuid
@@ -4539,3 +4828,201 @@ components:
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
+
+    Collection:
+      type: object
+      required:
+        [id, companyId, branchId, customerId, method, receiptNumber, amountJod, receivedAt, reference, notes,
+         createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        method: { type: string, enum: [cash, bank_transfer, post_dated_cheque] }
+        receiptNumber: { type: string, description: "Gapless RCP-/TRF-/PDC-{BRANCH}-{YYMM}-{SEQ}, prefix chosen by method." }
+        amountJod: { type: string }
+        receivedAt: { type: string, format: date-time }
+        reference: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+
+    CollectionAllocationItem:
+      type: object
+      required: [id, companyId, collectionId, invoiceId, amountJod, createdAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        collectionId: { type: string, format: uuid }
+        invoiceId: { type: string, format: uuid }
+        amountJod: { type: string }
+        createdAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true, description: "Set when a bounced cheque unwinds this allocation." }
+
+    PostDatedCheque:
+      type: object
+      required:
+        [id, companyId, branchId, customerId, collectionId, bankName, chequeNumber, dueDate, status, depositedAt,
+         clearedAt, bouncedAt, bounceReason, createdAt, updatedAt, voidedAt]
+      properties:
+        id: { type: string, format: uuid }
+        companyId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        collectionId: { type: string, format: uuid }
+        bankName: { type: string }
+        chequeNumber: { type: string }
+        dueDate: { type: string, format: date-time }
+        status: { type: string, enum: [pending, deposited, cleared, bounced, cancelled] }
+        depositedAt: { type: string, format: date-time, nullable: true }
+        clearedAt: { type: string, format: date-time, nullable: true }
+        bouncedAt: { type: string, format: date-time, nullable: true }
+        bounceReason: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        voidedAt: { type: string, format: date-time, nullable: true }
+
+    CollectionDetail:
+      allOf:
+        - $ref: "#/components/schemas/Collection"
+        - type: object
+          required: [allocations, postDatedCheque]
+          properties:
+            allocations: { type: array, items: { $ref: "#/components/schemas/CollectionAllocationItem" } }
+            postDatedCheque:
+              allOf: [{ $ref: "#/components/schemas/PostDatedCheque" }]
+              nullable: true
+    CollectionListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/Collection" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+    PostDatedChequeListResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/PostDatedCheque" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
+
+    CreateCollectionAllocationLine:
+      type: object
+      required: [invoiceId, amountJod]
+      properties:
+        invoiceId: { type: string, format: uuid }
+        amountJod: { type: string }
+    CreateCollectionRequest:
+      type: object
+      required: [customerId, branchId, method, amountJod, receivedAt, allocationMode]
+      properties:
+        customerId: { type: string, format: uuid }
+        branchId: { type: string, format: uuid }
+        method: { type: string, enum: [cash, bank_transfer, post_dated_cheque] }
+        amountJod: { type: string }
+        receivedAt: { type: string, format: date-time }
+        reference: { type: string }
+        notes: { type: string }
+        allocationMode: { type: string, enum: [fifo, manual] }
+        allocations:
+          type: array
+          items: { $ref: "#/components/schemas/CreateCollectionAllocationLine" }
+          description: Required (and only used) when allocationMode is "manual".
+        bankName: { type: string, description: "Required when method is post_dated_cheque." }
+        chequeNumber: { type: string, description: "Required when method is post_dated_cheque." }
+        chequeDueDate: { type: string, format: date-time, description: "Required when method is post_dated_cheque." }
+    BouncePostDatedChequeRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1 }
+
+    CustomerStatementLine:
+      type: object
+      required: [date, type, documentNumber, debitJod, creditJod, runningBalanceJod]
+      properties:
+        date: { type: string, format: date-time }
+        type: { type: string, enum: [invoice, collection] }
+        documentNumber: { type: string }
+        debitJod: { type: string }
+        creditJod: { type: string }
+        runningBalanceJod: { type: string }
+    CustomerStatementResponse:
+      type: object
+      required: [customerId, customerName, openingBalanceJod, lines, closingBalanceJod]
+      properties:
+        customerId: { type: string, format: uuid }
+        customerName: { type: string }
+        openingBalanceJod: { type: string }
+        lines: { type: array, items: { $ref: "#/components/schemas/CustomerStatementLine" } }
+        closingBalanceJod: { type: string }
+
+    AgingReportItem:
+      type: object
+      required: [customerId, customerName, currentJod, days30Jod, days60Jod, days90PlusJod, totalJod]
+      properties:
+        customerId: { type: string, format: uuid }
+        customerName: { type: string }
+        currentJod: { type: string }
+        days30Jod: { type: string }
+        days60Jod: { type: string }
+        days90PlusJod: { type: string }
+        totalJod: { type: string }
+    AgingReportResponse:
+      type: object
+      required: [asOf, items, grandTotalJod]
+      properties:
+        asOf: { type: string, format: date-time }
+        items: { type: array, items: { $ref: "#/components/schemas/AgingReportItem" } }
+        grandTotalJod: { type: string }
+
+    CreditControlItem:
+      type: object
+      required: [customerId, customerName, creditLimitJod, creditPolicy, outstandingJod, utilizationBasisPoints]
+      properties:
+        customerId: { type: string, format: uuid }
+        customerName: { type: string }
+        creditLimitJod: { type: string }
+        creditPolicy: { type: string, enum: [none, warning, block] }
+        outstandingJod: { type: string }
+        utilizationBasisPoints: { type: integer, description: "outstanding / limit, in basis points; unbounded above 10000 when over limit." }
+    CreditControlResponse:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/CreditControlItem" } }
+
+    CreditOverrideItem:
+      type: object
+      required:
+        [id, documentType, customerId, customerName, exceededByJod, overriddenByUserId, overriddenByName, reason,
+         overriddenAt]
+      properties:
+        id: { type: string, format: uuid }
+        documentType: { type: string, enum: [sales_order, delivery_order] }
+        customerId: { type: string, format: uuid }
+        customerName: { type: string }
+        exceededByJod: { type: string, description: "How far projected exposure exceeded the credit limit at override time (packages/core's evaluateCreditCheck) — the meaningful figure for both document types, since a delivery order has no order value of its own." }
+        overriddenByUserId: { type: string, format: uuid, nullable: true }
+        overriddenByName: { type: string, nullable: true }
+        reason: { type: string, nullable: true }
+        overriddenAt: { type: string, format: date-time }
+    CreditOverrideUserTotal:
+      type: object
+      required: [userId, userName, count, totalExceededByJod]
+      properties:
+        userId: { type: string, format: uuid }
+        userName: { type: string }
+        count: { type: integer }
+        totalExceededByJod: { type: string }
+    CreditOverridesReportResponse:
+      type: object
+      required: [items, totalsByUser]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/CreditOverrideItem" } }
+        totalsByUser: { type: array, items: { $ref: "#/components/schemas/CreditOverrideUserTotal" } }

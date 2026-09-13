@@ -63,7 +63,7 @@ export function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
             />
           </label>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           <Button type="submit" disabled={login.isPending}>
             {login.isPending ? t.login.submitting : t.login.submit}
           </Button>

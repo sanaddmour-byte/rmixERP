@@ -81,6 +81,46 @@ async function createTruckAndDriver() {
   return { truckId: truck.body.id as string, driverId: driver.body.id as string };
 }
 
+/**
+ * Creates a real *issued* invoice for a customer — Phase 8's
+ * credit-exposure computation (`apps/api/src/lib/creditExposure.ts`) sums
+ * real outstanding invoice balances instead of Phase 2's original
+ * confirmed/fulfilled-sales-order proxy, so a dispatch-time credit-block
+ * test needs an actual invoice already outstanding, not just a confirmed
+ * order sitting elsewhere.
+ */
+async function createIssuedInvoiceForCustomer(customerId: string, quantityM3: string): Promise<void> {
+  const orderRes = await request(app).post("/api/sales-orders").set("Authorization", `Bearer ${admin}`).send({ customerId, branchId });
+  const lineRes = await request(app)
+    .post(`/api/sales-orders/${orderRes.body.id}/lines`)
+    .set("Authorization", `Bearer ${admin}`)
+    .send({ productId, quantityM3 });
+  const salesOrderLineId = lineRes.body.lines[0].id as string;
+  await request(app).post(`/api/sales-orders/${orderRes.body.id}/confirm`).set("Authorization", `Bearer ${admin}`);
+
+  const deliveryRes = await request(app)
+    .post("/api/delivery-orders")
+    .set("Authorization", `Bearer ${admin}`)
+    .send({ branchId, salesOrderId: orderRes.body.id, salesOrderLineId, quantityM3, scheduledAt: "2026-01-15T08:00:00.000Z" });
+  const { truckId, driverId } = await createTruckAndDriver();
+  await request(app)
+    .post(`/api/delivery-orders/${deliveryRes.body.id}/dispatch`)
+    .set("Authorization", `Bearer ${admin}`)
+    .send({ truckId, driverId });
+  await request(app)
+    .post(`/api/delivery-orders/${deliveryRes.body.id}/deliver`)
+    .set("Authorization", `Bearer ${admin}`)
+    .send({ receivedQuantityM3: quantityM3, signedByName: "Site Foreman", signatureData: "data:image/png;base64,AAAA" });
+
+  const invoiceRes = await request(app)
+    .post(`/api/delivery-orders/${deliveryRes.body.id}/invoice`)
+    .set("Authorization", `Bearer ${admin}`)
+    .send({ mode: "combined" });
+  const invoiceId = invoiceRes.body.invoices[0].id as string;
+  await request(app).post(`/api/invoices/${invoiceId}/submit-for-clearance`).set("Authorization", `Bearer ${admin}`).send();
+  await request(app).post(`/api/invoices/${invoiceId}/issue`).set("Authorization", `Bearer ${admin}`).send();
+}
+
 describe("delivery orders — creation", () => {
   it("creates a planned delivery order against a confirmed sales order", async () => {
     const customerId = await createCustomer();
@@ -157,14 +197,19 @@ describe("delivery orders — dispatch and deliver lifecycle", () => {
     expect(res.status).toBe(400);
   });
 
-  // Confirming under 'block' with an exceeded limit is itself blocked by
-  // Phase 2's confirm-time check, so these fixtures confirm under 'warning'
-  // (which only warns, never blocks) and then flip the customer to 'block'
-  // afterwards — modeling the real scenario dispatch-time re-check exists
-  // for: the customer's standing changed after their order was confirmed.
+  // Dispatch-time exposure is Phase 8's real outstanding-invoice-balance
+  // computation (`apps/api/src/lib/creditExposure.ts`), not the delivery
+  // order being dispatched itself (its own contribution is always zero —
+  // the order's total is already reflected via any invoice raised against
+  // it). So triggering a block here means giving the customer a real
+  // backlog invoice that alone exceeds their limit, built under 'warning'
+  // (never blocks) and then flipping the customer to 'block' afterwards —
+  // modeling the real scenario dispatch-time re-check exists for: the
+  // customer's standing changed after their order was confirmed.
   it("blocks dispatch under credit policy 'block' when the limit is exceeded, with no override", async () => {
     const customerId = await createCustomer({ creditPolicy: "warning", creditLimitJod: "50.000" });
-    const salesOrderId = await createConfirmedSalesOrder(customerId, "10"); // 200 JOD net, over the 50 JOD limit
+    await createIssuedInvoiceForCustomer(customerId, "3"); // 60 JOD outstanding, over the 50 JOD limit on its own
+    const salesOrderId = await createConfirmedSalesOrder(customerId, "10");
     const created = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
@@ -191,6 +236,7 @@ describe("delivery orders — dispatch and deliver lifecycle", () => {
 
   it("dispatches a blocked delivery order with a mandatory-reason override, and audits it", async () => {
     const customerId = await createCustomer({ creditPolicy: "warning", creditLimitJod: "50.000" });
+    await createIssuedInvoiceForCustomer(customerId, "3"); // 60 JOD outstanding, over the 50 JOD limit on its own
     const salesOrderId = await createConfirmedSalesOrder(customerId, "10");
     const created = await request(app)
       .post("/api/delivery-orders")

@@ -7,9 +7,10 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-navy-900 text-white hover:bg-navy-800 focus-visible:ring-navy-900",
-        outline: "border border-navy-300 bg-white hover:bg-navy-50 focus-visible:ring-navy-400",
-        ghost: "hover:bg-navy-50 focus-visible:ring-navy-400",
+        default: "bg-navy-900 text-white hover:bg-navy-800 focus-visible:ring-navy-900 dark:bg-navy-700 dark:hover:bg-navy-600",
+        outline:
+          "border border-navy-300 bg-white hover:bg-navy-50 focus-visible:ring-navy-400 dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100 dark:hover:bg-navy-800",
+        ghost: "hover:bg-navy-50 focus-visible:ring-navy-400 dark:text-navy-100 dark:hover:bg-navy-800",
         accent: "bg-orange-500 text-white hover:bg-orange-600 focus-visible:ring-orange-500",
       },
       size: {

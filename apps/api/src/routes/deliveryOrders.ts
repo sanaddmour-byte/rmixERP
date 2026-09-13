@@ -18,6 +18,7 @@ import { requirePermission } from "../middleware/requirePermission";
 import { parsePagination, paginatedBody } from "../lib/pagination";
 import { notFound, validationError } from "../lib/errors";
 import { paramId, queryString } from "../lib/params";
+import { computeOutstandingInvoiceExposure } from "../lib/creditExposure";
 import { writeAudit } from "../audit";
 
 export const deliveryOrdersRouter = Router();
@@ -263,21 +264,12 @@ deliveryOrdersRouter.post(
       const [cust] = await tx.select().from(customer).where(eq(customer.id, order.customerId));
       if (!cust) throw new Error("sales order references a missing customer");
 
-      const [outstandingRow] = await tx
-        .select({ outstanding: sql<string>`coalesce(sum(${salesOrder.totalFils}), 0)` })
-        .from(salesOrder)
-        .where(
-          and(
-            eq(salesOrder.customerId, order.customerId),
-            inArray(salesOrder.status, ["confirmed", "fulfilled"]),
-            isNull(salesOrder.voidedAt),
-          ),
-        );
+      const currentOutstandingFils = await computeOutstandingInvoiceExposure(tx, order.customerId);
 
       const creditCheck = evaluateCreditCheck({
         policy: cust.creditPolicy,
         creditLimitFils: fils(cust.creditLimitFils),
-        currentOutstandingFils: fils(BigInt(outstandingRow?.outstanding ?? "0")),
+        currentOutstandingFils,
         newOrderAmountFils: ZERO_FILS,
       });
 
