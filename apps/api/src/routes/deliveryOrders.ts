@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { customer, deliveryOrder, batchRecord, proofOfDelivery, salesOrder, withTenant, type Tx } from "@rmixerp/db";
 import { assertDeliveryOrderTransition, evaluateCreditCheck, fils, filsToJodString, ZERO_FILS } from "@rmixerp/core";
 import {
@@ -111,7 +111,7 @@ deliveryOrdersRouter.get("/delivery-orders", requireAuth, requirePermission(MODU
       scheduledTo ? lte(deliveryOrder.scheduledAt, new Date(scheduledTo)) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(deliveryOrder).where(where).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(deliveryOrder).where(where).orderBy(desc(deliveryOrder.createdAt), deliveryOrder.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(deliveryOrder).where(where),
     ]);
     const batchIds = rows.map((r) => r.batchRecordId).filter((id): id is string => id !== null);
