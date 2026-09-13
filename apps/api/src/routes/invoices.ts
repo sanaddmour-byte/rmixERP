@@ -461,7 +461,7 @@ invoicesRouter.get("/invoices", requireAuth, requirePermission(MODULE, "view"), 
       customerId ? eq(invoice.customerId, customerId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(invoice).where(where).orderBy(desc(invoice.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(invoice).where(where).orderBy(desc(invoice.createdAt), invoice.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(invoice).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

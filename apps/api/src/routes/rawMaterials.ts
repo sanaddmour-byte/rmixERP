@@ -46,7 +46,7 @@ rawMaterialsRouter.get("/raw-materials", requireAuth, requirePermission(MODULE, 
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(isNull(rawMaterial.voidedAt), q ? ilike(rawMaterial.name, `%${q}%`) : undefined);
     const [rows, countRows] = await Promise.all([
-      tx.select().from(rawMaterial).where(where).orderBy(desc(rawMaterial.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(rawMaterial).where(where).orderBy(desc(rawMaterial.createdAt), rawMaterial.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(rawMaterial).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };
