@@ -2,7 +2,7 @@ import { bigint, boolean, numeric, pgEnum, pgTable, text, timestamp, unique, uui
 import { auditColumns, idColumn, tenantIsolationPolicy } from "./columns";
 import { company } from "./company";
 import { branch } from "./branch";
-import { salesOrder } from "./salesOrder";
+import { salesOrder, salesOrderLine } from "./salesOrder";
 import { productionOrder, batchRecord } from "./production";
 import { truck, driver } from "./fleet";
 import { creditPolicy } from "./customer";
@@ -23,6 +23,14 @@ export const deliveryOrder = pgTable(
     salesOrderId: uuid("sales_order_id")
       .notNull()
       .references(() => salesOrder.id),
+    // Which sales-order line this delivery fulfills — a sales order can
+    // carry multiple lines (different products/prices), so invoicing
+    // (Phase 6) needs this to know exactly which line's price/tax rate to
+    // bill at, rather than re-resolving a price at invoice time (which
+    // could drift from what was actually quoted/sold). Nullable so it
+    // doesn't break existing delivery-order creation; Phase 6 validates
+    // it's present before a delivery order can be invoiced.
+    salesOrderLineId: uuid("sales_order_line_id").references(() => salesOrderLine.id),
     productionOrderId: uuid("production_order_id").references(() => productionOrder.id),
     // The specific batch this delivery was loaded from — carries the QC flag
     // through at read time (DOMAIN.md Invariant 6's "flags every delivery

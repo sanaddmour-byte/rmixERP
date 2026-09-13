@@ -19,6 +19,7 @@ const MASTER_DATA_LINKS = [
 const SALES_LINKS = [
   { module: "quotations", href: "/quotations" },
   { module: "salesOrders", href: "/sales-orders" },
+  { module: "invoices", href: "/invoices" },
 ] as const;
 
 const PRODUCTION_LINKS = [

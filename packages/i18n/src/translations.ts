@@ -30,6 +30,7 @@ export interface Translations {
     drivers: string;
     dispatch: string;
     myDeliveries: string;
+    invoices: string;
   };
   login: {
     title: string;
@@ -96,6 +97,7 @@ export const translations: Record<Locale, Translations> = {
       drivers: "Drivers",
       dispatch: "Dispatch",
       myDeliveries: "My Deliveries",
+      invoices: "Invoices",
     },
     login: {
       title: "Sign in",
@@ -160,6 +162,7 @@ export const translations: Record<Locale, Translations> = {
       drivers: "السائقون",
       dispatch: "التوزيع",
       myDeliveries: "توصيلاتي",
+      invoices: "الفواتير",
     },
     login: {
       title: "تسجيل الدخول",
