@@ -31,6 +31,7 @@ export interface Translations {
     dispatch: string;
     myDeliveries: string;
     invoices: string;
+    clearanceQueue: string;
   };
   login: {
     title: string;
@@ -98,6 +99,7 @@ export const translations: Record<Locale, Translations> = {
       dispatch: "Dispatch",
       myDeliveries: "My Deliveries",
       invoices: "Invoices",
+      clearanceQueue: "Clearance Queue",
     },
     login: {
       title: "Sign in",
@@ -163,6 +165,7 @@ export const translations: Record<Locale, Translations> = {
       dispatch: "التوزيع",
       myDeliveries: "توصيلاتي",
       invoices: "الفواتير",
+      clearanceQueue: "قائمة التخليص",
     },
     login: {
       title: "تسجيل الدخول",

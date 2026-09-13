@@ -37,11 +37,33 @@ import { writeAudit } from "../audit";
 
 export const invoicesRouter = Router();
 const MODULE = "invoices";
+/** DOMAIN.md: "a cleared invoice can only be credit-noted, never edited" — credit/debit-note creation requires the invoice to have passed Phase 7's clearance gate. */
+const CLEARED_OR_LATER = new Set(["cleared", "issued", "partially_paid", "paid"]);
 
 type InvoiceRow = typeof invoice.$inferSelect;
 type InvoiceLineRow = typeof invoiceLine.$inferSelect;
 type CreditNoteRow = typeof creditNote.$inferSelect;
 type DebitNoteRow = typeof debitNote.$inferSelect;
+
+function clearanceFieldsToApi(row: {
+  clearanceStatus: "pending" | "cleared" | "rejected" | "retrying";
+  clearanceIcv: number | null;
+  clearanceQrPayload: string | null;
+  clearanceProviderReference: string | null;
+  clearanceAttempts: number;
+  clearanceNextRetryAt: Date | null;
+  clearanceError: string | null;
+}) {
+  return {
+    clearanceStatus: row.clearanceStatus,
+    clearanceIcv: row.clearanceIcv,
+    clearanceQrPayload: row.clearanceQrPayload,
+    clearanceProviderReference: row.clearanceProviderReference,
+    clearanceAttempts: row.clearanceAttempts,
+    clearanceNextRetryAt: row.clearanceNextRetryAt?.toISOString() ?? null,
+    clearanceError: row.clearanceError,
+  };
+}
 
 function invoiceToApi(row: InvoiceRow): Invoice {
   return {
@@ -60,6 +82,7 @@ function invoiceToApi(row: InvoiceRow): Invoice {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     voidedAt: row.voidedAt?.toISOString() ?? null,
+    ...clearanceFieldsToApi(row),
   };
 }
 
@@ -81,7 +104,7 @@ function lineToApi(row: InvoiceLineRow): InvoiceLine {
   };
 }
 
-function creditNoteToApi(row: CreditNoteRow): CreditNote {
+export function creditNoteToApi(row: CreditNoteRow): CreditNote {
   return {
     id: row.id,
     companyId: row.companyId,
@@ -95,10 +118,11 @@ function creditNoteToApi(row: CreditNoteRow): CreditNote {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     voidedAt: row.voidedAt?.toISOString() ?? null,
+    ...clearanceFieldsToApi(row),
   };
 }
 
-function debitNoteToApi(row: DebitNoteRow): DebitNote {
+export function debitNoteToApi(row: DebitNoteRow): DebitNote {
   return {
     id: row.id,
     companyId: row.companyId,
@@ -112,10 +136,11 @@ function debitNoteToApi(row: DebitNoteRow): DebitNote {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     voidedAt: row.voidedAt?.toISOString() ?? null,
+    ...clearanceFieldsToApi(row),
   };
 }
 
-async function loadInvoiceDetail(tx: Tx, id: string): Promise<InvoiceDetail | null> {
+export async function loadInvoiceDetail(tx: Tx, id: string): Promise<InvoiceDetail | null> {
   const [row] = await tx.select().from(invoice).where(and(eq(invoice.id, id), isNull(invoice.voidedAt)));
   if (!row) return null;
   // Sequential, not Promise.all: a transaction's queries share one
@@ -465,7 +490,14 @@ invoicesRouter.post(
 
     const result = await withTenant(db, req.auth!.companyId, async (tx) => {
       const [invoiceRow] = await tx.select().from(invoice).where(and(eq(invoice.id, id), isNull(invoice.voidedAt)));
-      if (!invoiceRow) return null;
+      if (!invoiceRow) return { kind: "not_found" as const };
+      // DOMAIN.md: "a cleared invoice can only be credit-noted, never
+      // edited" — the inverse also holds structurally: a NOT-yet-cleared
+      // invoice cannot be credit-noted either, since clearance (Phase 7)
+      // is the point the invoice becomes a real fiscal document.
+      if (!CLEARED_OR_LATER.has(invoiceRow.status)) {
+        return { kind: "not_cleared" as const, status: invoiceRow.status };
+      }
 
       const amountFils = jodStringToFils(input.amountJod);
       const taxFils = input.taxJod ? jodStringToFils(input.taxJod) : ZERO_FILS;
@@ -504,11 +536,15 @@ invoicesRouter.post(
         action: "create",
         after: row,
       });
-      return true;
+      return { kind: "ok" as const };
     });
 
-    if (!result) {
+    if (result.kind === "not_found") {
       res.status(404).json(notFound("Invoice"));
+      return;
+    }
+    if (result.kind === "not_cleared") {
+      res.status(400).json(validationError({ status: `Invoice must be cleared before it can be credit-noted (current status: ${result.status}).` }));
       return;
     }
     res.status(201).json((await withTenant(db, req.auth!.companyId, (tx) => loadInvoiceDetail(tx, id)))!);
@@ -531,7 +567,10 @@ invoicesRouter.post(
 
     const result = await withTenant(db, req.auth!.companyId, async (tx) => {
       const [invoiceRow] = await tx.select().from(invoice).where(and(eq(invoice.id, id), isNull(invoice.voidedAt)));
-      if (!invoiceRow) return null;
+      if (!invoiceRow) return { kind: "not_found" as const };
+      if (!CLEARED_OR_LATER.has(invoiceRow.status)) {
+        return { kind: "not_cleared" as const, status: invoiceRow.status };
+      }
 
       const amountFils = jodStringToFils(input.amountJod);
       const taxFils = input.taxJod ? jodStringToFils(input.taxJod) : ZERO_FILS;
@@ -570,11 +609,15 @@ invoicesRouter.post(
         action: "create",
         after: row,
       });
-      return true;
+      return { kind: "ok" as const };
     });
 
-    if (!result) {
+    if (result.kind === "not_found") {
       res.status(404).json(notFound("Invoice"));
+      return;
+    }
+    if (result.kind === "not_cleared") {
+      res.status(400).json(validationError({ status: `Invoice must be cleared before it can be debit-noted (current status: ${result.status}).` }));
       return;
     }
     res.status(201).json((await withTenant(db, req.auth!.companyId, (tx) => loadInvoiceDetail(tx, id)))!);

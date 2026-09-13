@@ -260,13 +260,35 @@ describe("gapless per-branch-per-month invoice numbering", () => {
 });
 
 describe("credit and debit notes", () => {
-  it("records a credit note and a debit note against an invoice", async () => {
+  it("400s creating a credit note against an invoice that hasn't cleared yet", async () => {
+    const { deliveryOrderId } = await setupDeliveredDeliveryOrder("1");
+    const invoiceRes = await request(app)
+      .post(`/api/delivery-orders/${deliveryOrderId}/invoice`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ mode: "combined" });
+    const invoiceId = invoiceRes.body.invoices[0].id as string;
+
+    const res = await request(app)
+      .post(`/api/invoices/${invoiceId}/credit-notes`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ amountJod: "10.000", reason: "Too early" });
+    expect(res.status).toBe(400);
+  });
+
+  it("records a credit note and a debit note against a cleared invoice", async () => {
     const { deliveryOrderId } = await setupDeliveredDeliveryOrder("2");
     const invoiceRes = await request(app)
       .post(`/api/delivery-orders/${deliveryOrderId}/invoice`)
       .set("Authorization", `Bearer ${admin}`)
       .send({ mode: "combined" });
     const invoiceId = invoiceRes.body.invoices[0].id as string;
+
+    const clearanceRes = await request(app)
+      .post(`/api/invoices/${invoiceId}/submit-for-clearance`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send();
+    expect(clearanceRes.status).toBe(200);
+    expect(clearanceRes.body.status).toBe("cleared"); // MockClearanceProvider always clears
 
     const creditRes = await request(app)
       .post(`/api/invoices/${invoiceId}/credit-notes`)

@@ -1,4 +1,4 @@
-import { bigint, integer, numeric, pgEnum, pgTable, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
+import { bigint, integer, jsonb, numeric, pgEnum, pgTable, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { auditColumns, idColumn, tenantIsolationPolicy } from "./columns";
 import { company } from "./company";
@@ -19,6 +19,47 @@ export const invoiceStatus = pgEnum("invoice_status", [
 
 /** Concrete supply is taxable; transport/pumping is exempt (CLAUDE.md's money/tax conventions). */
 export const invoiceLineTaxTreatment = pgEnum("invoice_line_tax_treatment", ["taxable", "exempt"]);
+
+/**
+ * Independent of `invoiceStatus` (Phase 7 introduces it; only `invoice`,
+ * `credit_note`, and `debit_note` carry it — all three are documents
+ * JoFotara clearance applies to, per PLAN.md). `pending` = not yet
+ * submitted; `retrying` = a transport failure occurred and a bounded
+ * exponential-backoff retry is scheduled (`packages/core`'s
+ * `computeRetryDelayMs`); `cleared`/`rejected` are terminal outcomes from
+ * the provider (a business rejection is never auto-retried). This is a
+ * finer-grained *submission* status than `invoiceStatus`'s coarser
+ * `pending_clearance`/`cleared`/`rejected` states — e.g. an invoice can
+ * stay `invoiceStatus = "pending_clearance"` while its `clearanceStatus`
+ * cycles `pending -> retrying -> retrying -> cleared` across several cron
+ * attempts.
+ */
+export const clearanceStatus = pgEnum("clearance_status", ["pending", "cleared", "rejected", "retrying"]);
+
+/**
+ * Columns shared by every document type clearance applies to (invoice,
+ * credit note, debit note) — kept as a plain object (not a shared table)
+ * since Drizzle has no cross-table column mixin; each table below spreads
+ * this in rather than duplicating field-by-field.
+ */
+function clearanceColumns() {
+  return {
+    clearanceStatus: clearanceStatus("clearance_status").notNull().default("pending"),
+    // Reused as the UBL document UUID (`packages/core`'s ClearanceProvider
+    // input) — no separate id column; this row's own `id` IS that UUID.
+    clearanceIcv: integer("clearance_icv"),
+    clearanceQrPayload: varchar("clearance_qr_payload", { length: 2000 }),
+    clearanceProviderReference: varchar("clearance_provider_reference", { length: 200 }),
+    clearanceAttempts: integer("clearance_attempts").notNull().default(0),
+    clearanceNextRetryAt: timestamp("clearance_next_retry_at", { withTimezone: true }),
+    clearanceError: varchar("clearance_error", { length: 2000 }),
+    // What we sent (UBL XML + metadata) and the provider's raw response —
+    // kept for audit/debugging on the clearance queue screen, not just
+    // the derived status.
+    clearanceSubmittedPayload: jsonb("clearance_submitted_payload"),
+    clearanceResponsePayload: jsonb("clearance_response_payload"),
+  };
+}
 
 export const invoice = pgTable(
   "invoice",
@@ -47,6 +88,7 @@ export const invoice = pgTable(
     taxFils: bigint("tax_fils", { mode: "bigint" }).notNull().default(sql`0`),
     totalFils: bigint("total_fils", { mode: "bigint" }).notNull().default(sql`0`),
     notes: varchar("notes", { length: 2000 }),
+    ...clearanceColumns(),
     ...auditColumns(),
   },
   () => [tenantIsolationPolicy()],
@@ -150,6 +192,7 @@ export const creditNote = pgTable(
     taxFils: bigint("tax_fils", { mode: "bigint" }).notNull().default(sql`0`),
     totalFils: bigint("total_fils", { mode: "bigint" }).notNull(),
     reason: varchar("reason", { length: 500 }).notNull(),
+    ...clearanceColumns(),
     ...auditColumns(),
   },
   () => [tenantIsolationPolicy()],
@@ -176,6 +219,7 @@ export const debitNote = pgTable(
     taxFils: bigint("tax_fils", { mode: "bigint" }).notNull().default(sql`0`),
     totalFils: bigint("total_fils", { mode: "bigint" }).notNull(),
     reason: varchar("reason", { length: 500 }).notNull(),
+    ...clearanceColumns(),
     ...auditColumns(),
   },
   () => [tenantIsolationPolicy()],
@@ -183,3 +227,29 @@ export const debitNote = pgTable(
 
 export type DebitNote = typeof debitNote.$inferSelect;
 export type NewDebitNote = typeof debitNote.$inferInsert;
+
+/**
+ * Gapless, monotonically increasing ICV (Invoice Counter Value) allocated
+ * per submission — DOMAIN.md/PLAN.md's "per-income-source-sequence
+ * monotonic ICV". One row per company: this models a single registered
+ * JoFotara "income source" per company, matching CLAUDE.md's single-
+ * tenant-at-go-live model. A company with multiple registered income
+ * sources would need a discriminator column added to the unique
+ * constraint — not modeled here since nothing in this codebase
+ * distinguishes income sources yet (documented, not guessed).
+ */
+export const clearanceIcvCounter = pgTable(
+  "clearance_icv_counter",
+  {
+    id: idColumn(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => company.id)
+      .unique(),
+    nextIcv: integer("next_icv").notNull().default(1),
+  },
+  () => [tenantIsolationPolicy()],
+).enableRLS();
+
+export type ClearanceIcvCounter = typeof clearanceIcvCounter.$inferSelect;
+export type NewClearanceIcvCounter = typeof clearanceIcvCounter.$inferInsert;

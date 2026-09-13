@@ -4,9 +4,11 @@ import {
   useCreateDebitNote,
   useGenerateInvoice,
   useGetInvoice,
+  useIssueInvoice,
   useListCustomers,
   useListDeliveryOrders,
   useListInvoices,
+  useSubmitInvoiceForClearance,
   type Invoice,
 } from "@rmixerp/contract";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@rmixerp/ui";
@@ -97,9 +99,12 @@ function GenerateInvoicePanel({ onGenerated }: { onGenerated: (invoiceId: string
 
 function InvoiceDetailPanel({ id }: { id: string }) {
   const permissions = useModulePermissions("invoices");
+  const clearancePermissions = useModulePermissions("clearance");
   const detail = useGetInvoice(id);
   const createCredit = useCreateCreditNote(refetchOnSuccess(detail));
   const createDebit = useCreateDebitNote(refetchOnSuccess(detail));
+  const submitForClearance = useSubmitInvoiceForClearance(refetchOnSuccess(detail));
+  const issue = useIssueInvoice(refetchOnSuccess(detail));
 
   const [creditAmount, setCreditAmount] = React.useState("");
   const [creditReason, setCreditReason] = React.useState("");
@@ -112,13 +117,33 @@ function InvoiceDetailPanel({ id }: { id: string }) {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>
           Invoice {inv.invoiceNumber} — <span className="capitalize">{inv.status.replace(/_/g, " ")}</span>
         </CardTitle>
+        {clearancePermissions.create && (
+          <div className="flex gap-2">
+            {(inv.status === "draft" || inv.clearanceStatus === "retrying") && (
+              <Button size="sm" disabled={submitForClearance.isPending} onClick={() => submitForClearance.mutate({ id })}>
+                {inv.clearanceStatus === "retrying" ? "Retry Clearance" : "Submit for Clearance"}
+              </Button>
+            )}
+            {inv.status === "cleared" && (
+              <Button size="sm" disabled={issue.isPending} onClick={() => issue.mutate({ id })}>
+                Issue
+              </Button>
+            )}
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         {inv.relatedInvoiceId && <p className="text-navy-500">Paired with invoice {inv.relatedInvoiceId.slice(0, 8)}…</p>}
+        <div className="rounded-md border border-navy-200 bg-navy-50 p-3 text-xs text-navy-600">
+          <span className="font-semibold capitalize">Clearance: {inv.clearanceStatus.replace(/_/g, " ")}</span>
+          {inv.clearanceIcv !== null && <span className="ms-3">ICV {inv.clearanceIcv}</span>}
+          {inv.clearanceQrPayload && <span className="ms-3">QR: {inv.clearanceQrPayload}</span>}
+          {inv.clearanceError && <span className="ms-3 text-orange-700">{inv.clearanceError}</span>}
+        </div>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-navy-200 text-left text-navy-500">
@@ -257,6 +282,7 @@ export function InvoicesPage() {
                 <th className="py-2 pe-4 font-medium">Invoice #</th>
                 <th className="py-2 pe-4 font-medium">Customer</th>
                 <th className="py-2 pe-4 font-medium">Status</th>
+                <th className="py-2 pe-4 font-medium">Clearance</th>
                 <th className="py-2 pe-4 font-medium">Total (JOD)</th>
                 <th className="py-2 pe-4 font-medium">Date</th>
               </tr>
@@ -264,14 +290,14 @@ export function InvoicesPage() {
             <tbody>
               {list.isLoading && (
                 <tr>
-                  <td colSpan={5} className="py-4 text-center text-navy-400">
+                  <td colSpan={6} className="py-4 text-center text-navy-400">
                     Loading…
                   </td>
                 </tr>
               )}
               {!list.isLoading && (body?.items.length ?? 0) === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-4 text-center text-navy-400">
+                  <td colSpan={6} className="py-4 text-center text-navy-400">
                     No records yet.
                   </td>
                 </tr>
@@ -285,6 +311,7 @@ export function InvoicesPage() {
                   <td className="py-2 pe-4">{row.invoiceNumber}</td>
                   <td className="py-2 pe-4">{customerById.get(row.customerId) ?? row.customerId}</td>
                   <td className="py-2 pe-4 capitalize">{row.status.replace(/_/g, " ")}</td>
+                  <td className="py-2 pe-4 capitalize">{row.clearanceStatus.replace(/_/g, " ")}</td>
                   <td className="py-2 pe-4">{row.totalJod}</td>
                   <td className="py-2 pe-4">{new Date(row.invoicedAt).toLocaleDateString()}</td>
                 </tr>

@@ -25,6 +25,7 @@ import { TrucksPage } from "./routes/TrucksPage";
 import { DriversPage } from "./routes/DriversPage";
 import { DispatchPage } from "./routes/DispatchPage";
 import { InvoicesPage } from "./routes/InvoicesPage";
+import { ClearanceQueuePage } from "./routes/ClearanceQueuePage";
 import { clearSession, getAccessToken } from "./lib/session";
 import { useCurrentUser } from "./lib/useCurrentUser";
 
@@ -50,6 +51,7 @@ const MASTER_DATA_LINKS: { href: string; labelKey: keyof Translations["nav"] }[]
   { href: "/drivers", labelKey: "drivers" },
   { href: "/dispatch", labelKey: "dispatch" },
   { href: "/invoices", labelKey: "invoices" },
+  { href: "/clearance-queue", labelKey: "clearanceQueue" },
 ];
 
 function Nav() {
@@ -142,6 +144,7 @@ export function App() {
           <Route path="/drivers" component={DriversPage} />
           <Route path="/dispatch" component={DispatchPage} />
           <Route path="/invoices" component={InvoicesPage} />
+          <Route path="/clearance-queue" component={ClearanceQueuePage} />
           <Route path="/" component={HealthPage} />
         </Switch>
       </main>

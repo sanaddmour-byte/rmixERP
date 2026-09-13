@@ -40,6 +40,7 @@ tags:
   - name: drivers
   - name: deliveryOrders
   - name: invoices
+  - name: clearance
 
 paths:
   /health:
@@ -2872,6 +2873,127 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "400": { $ref: "#/components/responses/ValidationError" }
 
+  /invoices/{id}/submit-for-clearance:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: submitInvoiceForClearance
+      tags: [clearance]
+      summary: >
+        Submit a draft invoice to the configured ClearanceProvider (real-time
+        e-invoicing clearance, defaulting to MockClearanceProvider). Also
+        used to manually retry a `retrying`/`rejected-then-corrected`
+        invoice. Idempotent on the invoice id via a row lock — concurrent
+        submissions of the same invoice never double-submit to the
+        provider.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoiceDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /invoices/{id}/issue:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: issueInvoice
+      tags: [clearance]
+      summary: Mark a cleared invoice as issued. Clearance-before-issue is enforced — only a `cleared` invoice can transition here.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoiceDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /credit-notes/{id}/submit-for-clearance:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: submitCreditNoteForClearance
+      tags: [clearance]
+      summary: Submit a credit note to the configured ClearanceProvider. Same idempotency/retry semantics as invoice submission.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreditNote" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /debit-notes/{id}/submit-for-clearance:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: submitDebitNoteForClearance
+      tags: [clearance]
+      summary: Submit a debit note to the configured ClearanceProvider. Same idempotency/retry semantics as invoice submission.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DebitNote" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /clearance-queue:
+    get:
+      operationId: listClearanceQueue
+      tags: [clearance]
+      summary: >
+        Back-office admin queue across invoices, credit notes, and debit
+        notes awaiting or failing clearance (web-only screen — no mobile
+        equivalent, per CLAUDE.md's back-office-screen exception).
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/PageSizeParam"
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, cleared, rejected, retrying] }
+        - name: documentType
+          in: query
+          schema: { type: string, enum: [invoice, credit_note, debit_note] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClearanceQueueResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -4250,31 +4372,47 @@ components:
       properties:
         items: { type: array, items: { $ref: "#/components/schemas/DispatchScheduleItem" } }
 
-    Invoice:
+    ClearanceFields:
       type: object
       required:
-        [id, companyId, branchId, customerId, invoiceNumber, status, invoicedAt, relatedInvoiceId, subtotalJod,
-         taxJod, totalJod, notes, createdAt, updatedAt, voidedAt]
+        [clearanceStatus, clearanceIcv, clearanceQrPayload, clearanceProviderReference, clearanceAttempts,
+         clearanceNextRetryAt, clearanceError]
       properties:
-        id: { type: string, format: uuid }
-        companyId: { type: string, format: uuid }
-        branchId: { type: string, format: uuid }
-        customerId: { type: string, format: uuid }
-        invoiceNumber: { type: string, description: "Gapless {BRANCH}-{YYMM}-{SEQ}, allocated in the same transaction as the invoice." }
-        status: { type: string, enum: [draft, pending_clearance, cleared, issued, partially_paid, paid, rejected] }
-        invoicedAt: { type: string, format: date-time }
-        relatedInvoiceId:
-          type: string
-          format: uuid
-          nullable: true
-          description: The other invoice in a combined+split pair — null for a combined invoice.
-        subtotalJod: { type: string }
-        taxJod: { type: string }
-        totalJod: { type: string }
-        notes: { type: string, nullable: true }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
-        voidedAt: { type: string, format: date-time, nullable: true }
+        clearanceStatus: { type: string, enum: [pending, cleared, rejected, retrying] }
+        clearanceIcv: { type: integer, nullable: true, description: "Per-income-source-sequence monotonic Invoice Counter Value allocated at submission." }
+        clearanceQrPayload: { type: string, nullable: true }
+        clearanceProviderReference: { type: string, nullable: true }
+        clearanceAttempts: { type: integer }
+        clearanceNextRetryAt: { type: string, format: date-time, nullable: true }
+        clearanceError: { type: string, nullable: true }
+
+    Invoice:
+      allOf:
+        - $ref: "#/components/schemas/ClearanceFields"
+        - type: object
+          required:
+            [id, companyId, branchId, customerId, invoiceNumber, status, invoicedAt, relatedInvoiceId, subtotalJod,
+             taxJod, totalJod, notes, createdAt, updatedAt, voidedAt]
+          properties:
+            id: { type: string, format: uuid }
+            companyId: { type: string, format: uuid }
+            branchId: { type: string, format: uuid }
+            customerId: { type: string, format: uuid }
+            invoiceNumber: { type: string, description: "Gapless {BRANCH}-{YYMM}-{SEQ}, allocated in the same transaction as the invoice." }
+            status: { type: string, enum: [draft, pending_clearance, cleared, issued, partially_paid, paid, rejected] }
+            invoicedAt: { type: string, format: date-time }
+            relatedInvoiceId:
+              type: string
+              format: uuid
+              nullable: true
+              description: The other invoice in a combined+split pair — null for a combined invoice.
+            subtotalJod: { type: string }
+            taxJod: { type: string }
+            totalJod: { type: string }
+            notes: { type: string, nullable: true }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+            voidedAt: { type: string, format: date-time, nullable: true }
 
     InvoiceLine:
       type: object
@@ -4297,23 +4435,25 @@ components:
         createdAt: { type: string, format: date-time }
 
     CreditNote:
-      type: object
-      required:
-        [id, companyId, branchId, invoiceId, noteNumber, amountJod, taxJod, totalJod, reason, createdAt, updatedAt,
-         voidedAt]
-      properties:
-        id: { type: string, format: uuid }
-        companyId: { type: string, format: uuid }
-        branchId: { type: string, format: uuid }
-        invoiceId: { type: string, format: uuid }
-        noteNumber: { type: string }
-        amountJod: { type: string }
-        taxJod: { type: string }
-        totalJod: { type: string }
-        reason: { type: string }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
-        voidedAt: { type: string, format: date-time, nullable: true }
+      allOf:
+        - $ref: "#/components/schemas/ClearanceFields"
+        - type: object
+          required:
+            [id, companyId, branchId, invoiceId, noteNumber, amountJod, taxJod, totalJod, reason, createdAt,
+             updatedAt, voidedAt]
+          properties:
+            id: { type: string, format: uuid }
+            companyId: { type: string, format: uuid }
+            branchId: { type: string, format: uuid }
+            invoiceId: { type: string, format: uuid }
+            noteNumber: { type: string }
+            amountJod: { type: string }
+            taxJod: { type: string }
+            totalJod: { type: string }
+            reason: { type: string }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+            voidedAt: { type: string, format: date-time, nullable: true }
     CreateCreditNoteRequest:
       type: object
       required: [amountJod, reason]
@@ -4323,23 +4463,25 @@ components:
         reason: { type: string, minLength: 1 }
 
     DebitNote:
-      type: object
-      required:
-        [id, companyId, branchId, invoiceId, noteNumber, amountJod, taxJod, totalJod, reason, createdAt, updatedAt,
-         voidedAt]
-      properties:
-        id: { type: string, format: uuid }
-        companyId: { type: string, format: uuid }
-        branchId: { type: string, format: uuid }
-        invoiceId: { type: string, format: uuid }
-        noteNumber: { type: string }
-        amountJod: { type: string }
-        taxJod: { type: string }
-        totalJod: { type: string }
-        reason: { type: string }
-        createdAt: { type: string, format: date-time }
-        updatedAt: { type: string, format: date-time }
-        voidedAt: { type: string, format: date-time, nullable: true }
+      allOf:
+        - $ref: "#/components/schemas/ClearanceFields"
+        - type: object
+          required:
+            [id, companyId, branchId, invoiceId, noteNumber, amountJod, taxJod, totalJod, reason, createdAt,
+             updatedAt, voidedAt]
+          properties:
+            id: { type: string, format: uuid }
+            companyId: { type: string, format: uuid }
+            branchId: { type: string, format: uuid }
+            invoiceId: { type: string, format: uuid }
+            noteNumber: { type: string }
+            amountJod: { type: string }
+            taxJod: { type: string }
+            totalJod: { type: string }
+            reason: { type: string }
+            createdAt: { type: string, format: date-time }
+            updatedAt: { type: string, format: date-time }
+            voidedAt: { type: string, format: date-time, nullable: true }
     CreateDebitNoteRequest:
       type: object
       required: [amountJod, reason]
@@ -4376,3 +4518,24 @@ components:
       required: [invoices]
       properties:
         invoices: { type: array, items: { $ref: "#/components/schemas/InvoiceDetail" } }
+
+    ClearanceQueueItem:
+      allOf:
+        - $ref: "#/components/schemas/ClearanceFields"
+        - type: object
+          required: [id, documentType, documentNumber, branchId, totalJod, createdAt]
+          properties:
+            id: { type: string, format: uuid }
+            documentType: { type: string, enum: [invoice, credit_note, debit_note] }
+            documentNumber: { type: string }
+            branchId: { type: string, format: uuid }
+            totalJod: { type: string }
+            createdAt: { type: string, format: date-time }
+    ClearanceQueueResponse:
+      type: object
+      required: [items, total, page, pageSize]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/ClearanceQueueItem" } }
+        total: { type: integer }
+        page: { type: integer }
+        pageSize: { type: integer }
