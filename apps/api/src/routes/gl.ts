@@ -95,7 +95,7 @@ glRouter.get("/gl/cost-centers", requireAuth, requirePermission(COST_CENTERS_MOD
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = sql`${costCenter.voidedAt} is null`;
     const [rows, countRows] = await Promise.all([
-      tx.select().from(costCenter).where(where).orderBy(costCenter.code).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(costCenter).where(where).orderBy(costCenter.code, costCenter.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(costCenter).where(where),
     ]);
     return { items: rows.map(costCenterToApi), total: countRows[0]?.count ?? 0 };
@@ -114,7 +114,7 @@ glRouter.get("/gl/journal-entries", requireAuth, requirePermission(JOURNAL_MODUL
       branchId ? eq(journalEntry.branchId, branchId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(journalEntry).where(where).orderBy(desc(journalEntry.entryDate)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(journalEntry).where(where).orderBy(desc(journalEntry.entryDate), journalEntry.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(journalEntry).where(where),
     ]);
     return { items: rows.map(journalEntryToApi), total: countRows[0]?.count ?? 0 };

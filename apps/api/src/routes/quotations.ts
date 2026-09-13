@@ -172,7 +172,7 @@ quotationsRouter.get("/quotations", requireAuth, requirePermission(MODULE, "view
       customerId ? eq(quotation.customerId, customerId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(quotation).where(where).orderBy(desc(quotation.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(quotation).where(where).orderBy(desc(quotation.createdAt), quotation.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(quotation).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

@@ -48,7 +48,7 @@ chargeTypesRouter.get("/charge-types", requireAuth, requirePermission(MODULE, "v
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(isNull(chargeType.voidedAt), q ? ilike(chargeType.name, `%${q}%`) : undefined);
     const [rows, countRows] = await Promise.all([
-      tx.select().from(chargeType).where(where).orderBy(desc(chargeType.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(chargeType).where(where).orderBy(desc(chargeType.createdAt), chargeType.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(chargeType).where(where),
     ]);
     return { items: rows, total: countRows[0]?.count ?? 0 };

@@ -197,7 +197,7 @@ procurementRouter.get("/purchase-requests", requireAuth, requirePermission(PR_MO
         .select()
         .from(purchaseRequest)
         .where(where)
-        .orderBy(desc(purchaseRequest.createdAt))
+        .orderBy(desc(purchaseRequest.createdAt), purchaseRequest.id)
         .limit(pagination.limit)
         .offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(purchaseRequest).where(where),
@@ -446,7 +446,7 @@ procurementRouter.get("/purchase-orders", requireAuth, requirePermission(PO_MODU
       vendorId ? eq(purchaseOrder.vendorId, vendorId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(purchaseOrder).where(where).orderBy(desc(purchaseOrder.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(purchaseOrder).where(where).orderBy(desc(purchaseOrder.createdAt), purchaseOrder.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(purchaseOrder).where(where),
     ]);
     return { items: rows.map(poToApi), total: countRows[0]?.count ?? 0 };
@@ -753,7 +753,7 @@ procurementRouter.get("/goods-receipts", requireAuth, requirePermission(GR_MODUL
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(isNull(goodsReceipt.voidedAt), purchaseOrderId ? eq(goodsReceipt.purchaseOrderId, purchaseOrderId) : undefined);
     const [rows, countRows] = await Promise.all([
-      tx.select().from(goodsReceipt).where(where).orderBy(desc(goodsReceipt.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(goodsReceipt).where(where).orderBy(desc(goodsReceipt.createdAt), goodsReceipt.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(goodsReceipt).where(where),
     ]);
     return { items: rows.map(grToApi), total: countRows[0]?.count ?? 0 };
@@ -952,7 +952,7 @@ procurementRouter.get("/vendor-bills", requireAuth, requirePermission(BILL_MODUL
       vendorId ? eq(vendorBill.vendorId, vendorId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(vendorBill).where(where).orderBy(desc(vendorBill.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(vendorBill).where(where).orderBy(desc(vendorBill.createdAt), vendorBill.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(vendorBill).where(where),
     ]);
     return { items: await Promise.all(rows.map((r) => billToApi(tx, r))), total: countRows[0]?.count ?? 0 };
@@ -1205,7 +1205,7 @@ procurementRouter.get("/payments", requireAuth, requirePermission(PAYMENT_MODULE
       method ? eq(payment.method, method as PaymentRow["method"]) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(payment).where(where).orderBy(desc(payment.createdAt)).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(payment).where(where).orderBy(desc(payment.createdAt), payment.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(payment).where(where),
     ]);
     return { items: rows.map(paymentToApi), total: countRows[0]?.count ?? 0 };
@@ -1277,7 +1277,7 @@ procurementRouter.get("/gl/accounts", requireAuth, requirePermission(GL_ACCOUNTS
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(isNull(account.voidedAt), type ? eq(account.type, type as AccountRow["type"]) : undefined);
     const [rows, countRows] = await Promise.all([
-      tx.select().from(account).where(where).orderBy(account.code).limit(pagination.limit).offset(pagination.offset),
+      tx.select().from(account).where(where).orderBy(account.code, account.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(account).where(where),
     ]);
     return { items: rows.map(accountToApi), total: countRows[0]?.count ?? 0 };
