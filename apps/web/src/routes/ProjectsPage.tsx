@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Link, useSearchParams } from "wouter";
 import {
   useCreateProject,
   useListCustomers,
@@ -20,11 +21,18 @@ function toRequestBody(values: FormValues) {
 }
 
 export function ProjectsPage() {
+  const [searchParams] = useSearchParams();
   const [page, setPage] = React.useState(1);
   const [q, setQ] = React.useState("");
+  const [customerFilterId] = React.useState(() => searchParams.get("customerId") ?? "");
   const permissions = useModulePermissions("projects");
 
   const customers = useListCustomers({ page: 1, pageSize: 100 });
+  const customerNameById = new Map(
+    customers.data?.status === 200 && typeof customers.data.data !== "string"
+      ? customers.data.data.items.map((c) => [c.id, c.name])
+      : [],
+  );
   const customerOptions =
     customers.data?.status === 200 && typeof customers.data.data !== "string"
       ? customers.data.data.items.map((c) => ({ value: c.id, label: c.name }))
@@ -36,7 +44,12 @@ export function ProjectsPage() {
     { name: "address", label: "Address", type: "text" },
   ];
 
-  const list = useListProjects({ page, pageSize: 20, ...(q && { q }) });
+  const list = useListProjects({
+    page,
+    pageSize: 20,
+    ...(q && { q }),
+    ...(customerFilterId && { customerId: customerFilterId }),
+  });
   const create = useCreateProject(refetchOnSuccess(list));
   const update = useUpdateProject(refetchOnSuccess(list));
   const voidMutation = useVoidProject(refetchOnSuccess(list));
@@ -48,7 +61,15 @@ export function ProjectsPage() {
       title="Projects"
       columns={[
         { key: "name", header: "Name" },
-        { key: "customerId", header: "Customer ID" },
+        {
+          key: "customerId",
+          header: "Customer",
+          render: (row) => (
+            <Link href={`/receivables-reports?customerId=${row.customerId}`} className="hover:underline">
+              {customerNameById.get(row.customerId) ?? row.customerId}
+            </Link>
+          ),
+        },
         { key: "address", header: "Address" },
       ]}
       items={body?.items ?? []}

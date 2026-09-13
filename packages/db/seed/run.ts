@@ -1,7 +1,8 @@
 import bcrypt from "bcryptjs";
 import { eq } from "drizzle-orm";
+import { DEFAULT_ACCOUNTS } from "@rmixerp/core";
 import { createDb } from "../src/client";
-import { appUser, branch, company, permission, role, rolePermission, userRole } from "../src/schema/index";
+import { account, appUser, branch, company, permission, role, rolePermission, userRole } from "../src/schema/index";
 
 /**
  * Explicit, one-time bootstrap for a fresh environment. Never imported by
@@ -52,6 +53,14 @@ const PERMISSION_MODULES = [
   "collections",
   "postDatedCheques",
   "receivablesReports",
+  "purchaseRequests",
+  "purchaseOrders",
+  "goodsReceipts",
+  "vendorBills",
+  "payments",
+  "glAccounts",
+  "glJournal",
+  "glReports",
 ] as const;
 const PERMISSION_ACTIONS = ["view", "create", "edit", "approve", "void"] as const;
 
@@ -78,6 +87,13 @@ async function main() {
     seededCompany ?? (await db.query.company.findFirst());
   if (!companyRow) {
     throw new Error("Failed to create or find the company row");
+  }
+
+  for (const acc of DEFAULT_ACCOUNTS) {
+    await db
+      .insert(account)
+      .values({ companyId: companyRow.id, code: acc.code, name: acc.name, type: acc.type })
+      .onConflictDoNothing();
   }
 
   for (let i = 1; i <= 11; i++) {

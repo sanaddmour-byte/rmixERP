@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useSearchParams } from "wouter";
 import {
   useCancelProductionOrder,
   useCompleteProductionOrder,
@@ -390,9 +391,10 @@ function ProductionOrderDetail({ orderId }: { orderId: string }) {
 }
 
 export function ProductionOrdersPage() {
+  const [searchParams] = useSearchParams();
   const [page, setPage] = React.useState(1);
   const [status, setStatus] = React.useState<ProductionOrderStatus | "">("");
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [selectedId, setSelectedId] = React.useState<string | null>(() => searchParams.get("id"));
   const permissions = useModulePermissions("productionOrders");
 
   const branches = useListBranches({ page: 1, pageSize: 100 });

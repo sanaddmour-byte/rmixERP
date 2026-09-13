@@ -85,6 +85,13 @@
       "when": 1788720101022,
       "tag": "0011_conscious_wolfpack",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788762332961,
+      "tag": "0012_wide_clint_barton",
+      "breakpoints": true
     }
   ]
 }

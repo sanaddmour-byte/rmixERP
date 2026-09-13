@@ -29,6 +29,13 @@ import { ClearanceQueuePage } from "./routes/ClearanceQueuePage";
 import { CollectionsPage } from "./routes/CollectionsPage";
 import { PostDatedChequesPage } from "./routes/PostDatedChequesPage";
 import { ReceivablesReportsPage } from "./routes/ReceivablesReportsPage";
+import { PurchaseRequestsPage } from "./routes/PurchaseRequestsPage";
+import { PurchaseOrdersPage } from "./routes/PurchaseOrdersPage";
+import { GoodsReceiptsPage } from "./routes/GoodsReceiptsPage";
+import { VendorBillsPage } from "./routes/VendorBillsPage";
+import { PaymentsPage } from "./routes/PaymentsPage";
+import { ChartOfAccountsPage } from "./routes/ChartOfAccountsPage";
+import { GLReportsPage } from "./routes/GLReportsPage";
 
 export function App() {
   return (
@@ -64,6 +71,13 @@ export function App() {
           <Route path="/collections" component={CollectionsPage} />
           <Route path="/post-dated-cheques" component={PostDatedChequesPage} />
           <Route path="/receivables-reports" component={ReceivablesReportsPage} />
+          <Route path="/purchase-requests" component={PurchaseRequestsPage} />
+          <Route path="/purchase-orders" component={PurchaseOrdersPage} />
+          <Route path="/goods-receipts" component={GoodsReceiptsPage} />
+          <Route path="/vendor-bills" component={VendorBillsPage} />
+          <Route path="/payments" component={PaymentsPage} />
+          <Route path="/chart-of-accounts" component={ChartOfAccountsPage} />
+          <Route path="/gl-reports" component={GLReportsPage} />
           <Route path="/" component={HomePage} />
         </Switch>
       </main>

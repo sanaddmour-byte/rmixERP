@@ -45,12 +45,23 @@ const RECEIVABLES_LINKS = [
   { module: "receivablesReports", href: "/customer-statement", labelKey: "customerStatement" },
 ] as const;
 
+// Procurement/approvers' field screens (PLAN.md's Phase 9 mobile scope):
+// PR/PO create + approve/reject, and goods-receipt capture (reached from a
+// PO's own detail screen once approved, matching deliveries/[id]'s proof-
+// of-delivery pattern rather than a separate home entry). Vendor bills,
+// payments, chart of accounts, and GL reports stay web-only/back-office.
+const PROCUREMENT_LINKS = [
+  { module: "purchaseRequests", href: "/purchase-requests", labelKey: "purchaseRequests" },
+  { module: "purchaseOrders", href: "/purchase-orders", labelKey: "purchaseOrders" },
+] as const;
+
 type LinkModule =
   | (typeof MASTER_DATA_LINKS)[number]["module"]
   | (typeof SALES_LINKS)[number]["module"]
   | (typeof PRODUCTION_LINKS)[number]["module"]
   | (typeof DISPATCH_LINKS)[number]["module"]
-  | (typeof RECEIVABLES_LINKS)[number]["module"];
+  | (typeof RECEIVABLES_LINKS)[number]["module"]
+  | (typeof PROCUREMENT_LINKS)[number]["module"];
 
 function MasterDataLink({
   module,
@@ -137,6 +148,12 @@ export default function HealthScreen() {
 
           <View>
             {RECEIVABLES_LINKS.map((link) => (
+              <MasterDataLink key={link.href} module={link.module} href={link.href} labelKey={link.labelKey} />
+            ))}
+          </View>
+
+          <View>
+            {PROCUREMENT_LINKS.map((link) => (
               <MasterDataLink key={link.href} module={link.module} href={link.href} labelKey={link.labelKey} />
             ))}
           </View>

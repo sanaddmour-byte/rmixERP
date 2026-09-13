@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Link } from "wouter";
 import {
   useCreateCustomer,
   useListCustomers,
@@ -9,6 +10,31 @@ import {
 import { ResourceListPage, type FieldConfig, type FormValues } from "../components/ResourceListPage";
 import { refetchOnSuccess } from "../lib/refetchOnSuccess";
 import { useModulePermissions } from "../lib/usePermissions";
+
+/** Every other module that references a customer, filtered to this one — the "connections" the DB already models via customerId FKs. */
+function CustomerConnections({ customerId }: { customerId: string }) {
+  const links: { href: string; label: string }[] = [
+    { href: `/receivables-reports?customerId=${customerId}`, label: "Statement" },
+    { href: `/quotations?customerId=${customerId}`, label: "Quotations" },
+    { href: `/sales-orders?customerId=${customerId}`, label: "Orders" },
+    { href: `/invoices?customerId=${customerId}`, label: "Invoices" },
+    { href: `/collections?customerId=${customerId}`, label: "Collections" },
+  ];
+  return (
+    <div className="flex flex-wrap gap-x-2 gap-y-1 text-xs">
+      {links.map((l) => (
+        <Link
+          key={l.href}
+          href={l.href}
+          className="text-orange-600 hover:underline dark:text-orange-400"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {l.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
 
 const FIELDS: FieldConfig[] = [
   { name: "name", label: "Name", type: "text", required: true },
@@ -72,6 +98,7 @@ export function CustomersPage() {
         { key: "phone", header: "Phone" },
         { key: "creditLimitJod", header: "Credit Limit (JOD)" },
         { key: "creditPolicy", header: "Credit Policy" },
+        { key: "id", header: "Connections", render: (row) => <CustomerConnections customerId={row.id} /> },
       ]}
       items={body?.items ?? []}
       total={body?.total ?? 0}

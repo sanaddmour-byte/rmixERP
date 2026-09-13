@@ -20,6 +20,13 @@ export interface Translations {
     chargeTypes: string;
     rawMaterials: string;
     vendors: string;
+    purchaseRequests: string;
+    purchaseOrders: string;
+    goodsReceipts: string;
+    vendorBills: string;
+    payments: string;
+    chartOfAccounts: string;
+    glReports: string;
     quotations: string;
     salesOrders: string;
     mixDesigns: string;
@@ -66,6 +73,7 @@ export interface Translations {
     creditOverridesDesc: string;
     qcTraceabilityDesc: string;
     productionYieldDesc: string;
+    glReportsDesc: string;
     openReport: string;
   };
   login: {
@@ -123,6 +131,13 @@ export const translations: Record<Locale, Translations> = {
       chargeTypes: "Charge Types",
       rawMaterials: "Raw Materials",
       vendors: "Vendors",
+      purchaseRequests: "Purchase Requests",
+      purchaseOrders: "Purchase Orders",
+      goodsReceipts: "Goods Receipts",
+      vendorBills: "Vendor Bills",
+      payments: "Payments",
+      chartOfAccounts: "Chart of Accounts",
+      glReports: "GL Reports",
       quotations: "Quotations",
       salesOrders: "Sales Orders",
       mixDesigns: "Mix Designs",
@@ -169,6 +184,7 @@ export const translations: Record<Locale, Translations> = {
       creditOverridesDesc: "Sales/delivery orders that were approved despite a credit block.",
       qcTraceabilityDesc: "Cube-test results traced back to the batch and mix design that produced them.",
       productionYieldDesc: "Planned vs. actual yield variance for production orders.",
+      glReportsDesc: "Trial balance, profit & loss, balance sheet, and cash flow.",
       openReport: "Open",
     },
     login: {
@@ -224,6 +240,13 @@ export const translations: Record<Locale, Translations> = {
       chargeTypes: "أنواع الرسوم",
       rawMaterials: "المواد الخام",
       vendors: "الموردون",
+      purchaseRequests: "طلبات الشراء",
+      purchaseOrders: "أوامر الشراء",
+      goodsReceipts: "إيصالات الاستلام",
+      vendorBills: "فواتير الموردين",
+      payments: "المدفوعات",
+      chartOfAccounts: "دليل الحسابات",
+      glReports: "تقارير الحسابات العامة",
       quotations: "عروض الأسعار",
       salesOrders: "أوامر البيع",
       mixDesigns: "تصاميم الخلطات",
@@ -270,6 +293,7 @@ export const translations: Record<Locale, Translations> = {
       creditOverridesDesc: "أوامر البيع أو التسليم التي تم اعتمادها رغم تجاوز حد الائتمان.",
       qcTraceabilityDesc: "نتائج اختبار المكعبات مربوطة بالدفعة وتصميم الخلطة اللذين أنتجاها.",
       productionYieldDesc: "الفرق بين الإنتاجية المخططة والفعلية لأوامر الإنتاج.",
+      glReportsDesc: "ميزان المراجعة، الأرباح والخسائر، الميزانية العمومية، والتدفق النقدي.",
       openReport: "فتح",
     },
     login: {

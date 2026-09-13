@@ -7,7 +7,16 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "RMC ERP uses your photo library to attach goods-receipt photos.",
+          "cameraPermission": "RMC ERP uses your camera to photograph received goods."
+        }
+      ]
+    ],
     "extra": {
       "apiBaseUrl": "http://localhost:3000/api"
     },

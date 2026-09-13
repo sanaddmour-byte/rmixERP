@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Link, useSearchParams } from "wouter";
 import {
   useCancelSalesOrder,
   useConfirmSalesOrder,
@@ -105,10 +106,13 @@ function SalesOrderDetail({ salesOrderId }: { salesOrderId: string }) {
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>
           Sales Order — <span className="capitalize">{o.status}</span>
         </CardTitle>
+        <Link href={`/dispatch?salesOrderId=${salesOrderId}`} className="text-sm text-orange-600 hover:underline dark:text-orange-400">
+          See deliveries →
+        </Link>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap gap-4 text-sm text-navy-600 dark:text-navy-300">
@@ -309,9 +313,11 @@ function SalesOrderDetail({ salesOrderId }: { salesOrderId: string }) {
 }
 
 export function SalesOrdersPage() {
+  const [searchParams] = useSearchParams();
   const [page, setPage] = React.useState(1);
   const [status, setStatus] = React.useState<SalesOrderStatus | "">("");
-  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [selectedId, setSelectedId] = React.useState<string | null>(() => searchParams.get("id"));
+  const [customerFilterId] = React.useState(() => searchParams.get("customerId") ?? "");
   const permissions = useModulePermissions("salesOrders");
 
   const branches = useListBranches({ page: 1, pageSize: 100 });
@@ -329,7 +335,12 @@ export function SalesOrdersPage() {
   const [projectId, setProjectId] = React.useState("");
   const [notes, setNotes] = React.useState("");
 
-  const list = useListSalesOrders({ page, pageSize: 20, ...(status && { status }) });
+  const list = useListSalesOrders({
+    page,
+    pageSize: 20,
+    ...(status && { status }),
+    ...(customerFilterId && { customerId: customerFilterId }),
+  });
   const create = useCreateSalesOrder(refetchOnSuccess(list));
 
   const body = list.data?.status === 200 ? list.data.data : undefined;
@@ -430,6 +441,14 @@ export function SalesOrdersPage() {
         </Card>
       )}
 
+      {customerFilterId && (
+        <p className="text-xs text-navy-500 dark:text-navy-400">
+          Filtered to one customer.{" "}
+          <Link href="/sales-orders" className="text-orange-600 hover:underline dark:text-orange-400">
+            Clear
+          </Link>
+        </p>
+      )}
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Sales Orders (Order Book)</CardTitle>
@@ -480,7 +499,15 @@ export function SalesOrdersPage() {
                   onClick={() => setSelectedId(row.id)}
                 >
                   <td className="py-2 pe-4 capitalize">{row.status}</td>
-                  <td className="py-2 pe-4">{customerOptions.find((c) => c.id === row.customerId)?.name ?? row.customerId}</td>
+                  <td className="py-2 pe-4">
+                    <Link
+                      href={`/receivables-reports?customerId=${row.customerId}`}
+                      className="hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {customerOptions.find((c) => c.id === row.customerId)?.name ?? row.customerId}
+                    </Link>
+                  </td>
                   <td className="py-2 pe-4">{row.totalJod}</td>
                   <td className="py-2 pe-4">
                     {row.creditOverride ? (

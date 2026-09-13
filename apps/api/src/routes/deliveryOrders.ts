@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
-import { customer, deliveryOrder, batchRecord, proofOfDelivery, salesOrder, withTenant, type Tx } from "@rmixerp/db";
+import { customer, deliveryOrder, batchRecord, proofOfDelivery, salesOrder, salesOrderLine, withTenant, type Tx } from "@rmixerp/db";
 import { assertDeliveryOrderTransition, evaluateCreditCheck, fils, filsToJodString, ZERO_FILS } from "@rmixerp/core";
 import {
   CreateDeliveryOrderBody,
@@ -99,15 +99,22 @@ deliveryOrdersRouter.get("/delivery-orders", requireAuth, requirePermission(MODU
   const status = queryString(req, "status");
   const branchId = queryString(req, "branchId");
   const driverId = queryString(req, "driverId");
+  const salesOrderId = queryString(req, "salesOrderId");
   const scheduledFrom = queryString(req, "scheduledFrom");
   const scheduledTo = queryString(req, "scheduledTo");
 
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
+    const salesOrderLineIds = salesOrderId
+      ? (await tx.select({ id: salesOrderLine.id }).from(salesOrderLine).where(eq(salesOrderLine.salesOrderId, salesOrderId))).map(
+          (r) => r.id,
+        )
+      : null;
     const where = and(
       isNull(deliveryOrder.voidedAt),
       status ? eq(deliveryOrder.status, status as DeliveryOrderRow["status"]) : undefined,
       branchId ? eq(deliveryOrder.branchId, branchId) : undefined,
       driverId ? eq(deliveryOrder.driverId, driverId) : undefined,
+      salesOrderLineIds ? inArray(deliveryOrder.salesOrderLineId, salesOrderLineIds) : undefined,
       scheduledFrom ? gte(deliveryOrder.scheduledAt, new Date(scheduledFrom)) : undefined,
       scheduledTo ? lte(deliveryOrder.scheduledAt, new Date(scheduledTo)) : undefined,
     );
