@@ -5,7 +5,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* Brand: navy (primary/structure) + orange (accent/interactive). */
+  /* Brand: navy (primary/structure) + orange (accent/interactive) + green (success/positive). */
   --color-navy-50: #eef2f8;
   --color-navy-100: #d7e0ee;
   --color-navy-200: #b0c1dd;
@@ -28,6 +28,17 @@
   --color-orange-700: #b23c09;
   --color-orange-800: #8f2f0d;
   --color-orange-900: #74280f;
+
+  --color-green-50: #eaf8f0;
+  --color-green-100: #cdedd9;
+  --color-green-200: #9bdab3;
+  --color-green-300: #63c088;
+  --color-green-400: #34a366;
+  --color-green-500: #16874f;
+  --color-green-600: #0f6b3f;
+  --color-green-700: #0d5433;
+  --color-green-800: #0c4229;
+  --color-green-900: #0a3522;
 }
 
 :root {
