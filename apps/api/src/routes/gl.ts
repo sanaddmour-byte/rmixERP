@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
-import { account, costCenter, journalEntry, journalLine, withTenant, type Tx } from "@rmixerp/db";
+import { account, accountingPeriod, costCenter, journalEntry, journalLine, withTenant, type Tx } from "@rmixerp/db";
 import {
   accountBalance,
   addFils,
@@ -12,13 +12,15 @@ import {
   type AccountType,
   type Fils,
 } from "@rmixerp/core";
-import { CreateCostCenterBody } from "@rmixerp/contract";
+import { CloseAccountingPeriodBody, CreateCostCenterBody, ReopenAccountingPeriodBody, ReverseJournalEntryBody } from "@rmixerp/contract";
 import { db } from "../db";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requirePermission";
 import { parsePagination, paginatedBody } from "../lib/pagination";
 import { notFound, validationError } from "../lib/errors";
 import { paramId, queryString } from "../lib/params";
+import { writeAudit } from "../audit";
+import { reverseJournalEntry } from "../lib/glPosting";
 
 export const glRouter = Router();
 const COST_CENTERS_MODULE = "glAccounts";
@@ -29,6 +31,23 @@ type CostCenterRow = typeof costCenter.$inferSelect;
 type JournalEntryRow = typeof journalEntry.$inferSelect;
 type JournalLineRow = typeof journalLine.$inferSelect;
 type AccountRow = typeof account.$inferSelect;
+type AccountingPeriodRow = typeof accountingPeriod.$inferSelect;
+
+const YEAR_MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+function accountingPeriodToApi(row: AccountingPeriodRow) {
+  return {
+    id: row.id,
+    companyId: row.companyId,
+    yearMonth: row.yearMonth,
+    status: row.status,
+    closedAt: row.closedAt?.toISOString() ?? null,
+    closedBy: row.closedBy,
+    reopenedAt: row.reopenedAt?.toISOString() ?? null,
+    reopenedBy: row.reopenedBy,
+    reopenReason: row.reopenReason,
+  };
+}
 
 function costCenterToApi(row: CostCenterRow) {
   return {
@@ -135,6 +154,64 @@ glRouter.get("/gl/journal-entries/:id", requireAuth, requirePermission(JOURNAL_M
     return;
   }
   res.status(200).json(body);
+});
+
+/**
+ * The only correction mechanism for a posted entry (CLAUDE.md Hard Rule: a
+ * posted journal entry is never edited or deleted) — posts an
+ * equal-and-opposite entry and records the reason. Refuses a second
+ * reversal of the same entry rather than silently double-reversing it.
+ */
+glRouter.post("/gl/journal-entries/:id/reverse", requireAuth, requirePermission(JOURNAL_MODULE, "approve"), async (req, res) => {
+  const id = paramId(req);
+  const parsed = ReverseJournalEntryBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json(validationError(parsed.error.flatten()));
+    return;
+  }
+
+  const result = await withTenant(db, req.auth!.companyId, async (tx) => {
+    const [original] = await tx.select().from(journalEntry).where(eq(journalEntry.id, id));
+    if (!original) return { kind: "not_found" as const };
+
+    const [existingReversal] = await tx
+      .select()
+      .from(journalEntry)
+      .where(and(eq(journalEntry.sourceDocumentType, "journal_entry_reversal"), eq(journalEntry.sourceDocumentId, id)));
+    if (existingReversal) return { kind: "already_reversed" as const };
+
+    const reversalDate = parsed.data.reversalDate ? new Date(parsed.data.reversalDate) : new Date();
+    const posted = await reverseJournalEntry(tx, req.auth!.companyId, id, reversalDate, parsed.data.reason);
+    if (!posted.ok) return { kind: "period_closed" as const };
+
+    await writeAudit(tx, {
+      companyId: req.auth!.companyId,
+      actorUserId: req.auth!.userId,
+      entityType: "journal_entry",
+      entityId: posted.id,
+      action: "reverse",
+      before: original,
+      reason: parsed.data.reason,
+    });
+
+    const [row] = await tx.select().from(journalEntry).where(eq(journalEntry.id, posted.id));
+    const lines = await tx.select().from(journalLine).where(eq(journalLine.journalEntryId, posted.id));
+    return { kind: "ok" as const, body: { ...journalEntryToApi(row!), lines: lines.map(journalLineToApi) } };
+  });
+
+  if (result.kind === "not_found") {
+    res.status(404).json(notFound("Journal entry"));
+    return;
+  }
+  if (result.kind === "already_reversed") {
+    res.status(400).json(validationError({ id: "this journal entry has already been reversed" }));
+    return;
+  }
+  if (result.kind === "period_closed") {
+    res.status(400).json(validationError({ reversalDate: "accounting period for this reversal date is closed" }));
+    return;
+  }
+  res.status(201).json(result.body);
 });
 
 /** Every non-voided account's net debit/credit total up to (and including) `asOf`. */
@@ -324,4 +401,121 @@ glRouter.get("/gl/reports/cash-flow", requireAuth, requirePermission(REPORTS_MOD
     return { from: from.toISOString(), to: to.toISOString(), lines, netChangeJod: filsToJodString(running) };
   });
   res.status(200).json(body);
+});
+
+/**
+ * Explicit history of closed/reopened periods — a month with no row here is
+ * open (see packages/db/src/schema/gl.ts's accountingPeriod docstring), so
+ * this list is not "every month", only the ones someone has acted on.
+ */
+glRouter.get("/gl/accounting-periods", requireAuth, requirePermission(JOURNAL_MODULE, "view"), async (req, res) => {
+  const rows = await withTenant(db, req.auth!.companyId, (tx) =>
+    tx.select().from(accountingPeriod).orderBy(desc(accountingPeriod.yearMonth)),
+  );
+  res.status(200).json({ items: rows.map(accountingPeriodToApi) });
+});
+
+glRouter.post("/gl/accounting-periods/close", requireAuth, requirePermission(JOURNAL_MODULE, "approve"), async (req, res) => {
+  const parsed = CloseAccountingPeriodBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json(validationError(parsed.error.flatten()));
+    return;
+  }
+  if (!YEAR_MONTH_RE.test(parsed.data.yearMonth)) {
+    res.status(400).json(validationError({ yearMonth: "must be in YYYY-MM form" }));
+    return;
+  }
+
+  const result = await withTenant(db, req.auth!.companyId, async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(accountingPeriod)
+      .where(and(eq(accountingPeriod.companyId, req.auth!.companyId), eq(accountingPeriod.yearMonth, parsed.data.yearMonth)))
+      .for("update");
+    if (existing?.status === "closed") return { kind: "already_closed" as const };
+
+    const now = new Date();
+    const [row] = existing
+      ? await tx
+          .update(accountingPeriod)
+          .set({ status: "closed", closedAt: now, closedBy: req.auth!.userId, updatedAt: now })
+          .where(eq(accountingPeriod.id, existing.id))
+          .returning()
+      : await tx
+          .insert(accountingPeriod)
+          .values({
+            companyId: req.auth!.companyId,
+            yearMonth: parsed.data.yearMonth,
+            status: "closed",
+            closedAt: now,
+            closedBy: req.auth!.userId,
+            createdBy: req.auth!.userId,
+          })
+          .returning();
+    if (!row) throw new Error("accounting period close returned no row");
+
+    await writeAudit(tx, {
+      companyId: req.auth!.companyId,
+      actorUserId: req.auth!.userId,
+      entityType: "accounting_period",
+      entityId: row.id,
+      action: "close",
+      before: existing ?? null,
+      after: row,
+    });
+    return { kind: "ok" as const, row };
+  });
+
+  if (result.kind === "already_closed") {
+    res.status(400).json(validationError({ yearMonth: "period is already closed" }));
+    return;
+  }
+  res.status(200).json(accountingPeriodToApi(result.row));
+});
+
+glRouter.post("/gl/accounting-periods/reopen", requireAuth, requirePermission(JOURNAL_MODULE, "approve"), async (req, res) => {
+  const parsed = ReopenAccountingPeriodBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json(validationError(parsed.error.flatten()));
+    return;
+  }
+  if (!YEAR_MONTH_RE.test(parsed.data.yearMonth)) {
+    res.status(400).json(validationError({ yearMonth: "must be in YYYY-MM form" }));
+    return;
+  }
+
+  const result = await withTenant(db, req.auth!.companyId, async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(accountingPeriod)
+      .where(and(eq(accountingPeriod.companyId, req.auth!.companyId), eq(accountingPeriod.yearMonth, parsed.data.yearMonth)))
+      .for("update");
+    if (!existing || existing.status !== "closed") return { kind: "not_closed" as const };
+
+    const now = new Date();
+    const [row] = await tx
+      .update(accountingPeriod)
+      .set({ status: "open", reopenedAt: now, reopenedBy: req.auth!.userId, reopenReason: parsed.data.reason, updatedAt: now })
+      .where(eq(accountingPeriod.id, existing.id))
+      .returning();
+    if (!row) throw new Error("accounting period reopen returned no row");
+
+    await writeAudit(tx, {
+      companyId: req.auth!.companyId,
+      actorUserId: req.auth!.userId,
+      entityType: "accounting_period",
+      entityId: row.id,
+      action: "reopen",
+      before: existing,
+      after: row,
+      reason: parsed.data.reason,
+    });
+    return { kind: "ok" as const, row };
+  });
+
+  if (result.kind === "not_closed") {
+    res.status(400).json(validationError({ yearMonth: "period is not closed" }));
+    return;
+  }
+  res.status(200).json(accountingPeriodToApi(result.row));
 });
