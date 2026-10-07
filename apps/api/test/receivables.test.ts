@@ -7,6 +7,13 @@ const app = createApp();
 let admin: string;
 let branchId: string;
 let productId: string;
+// Cheque numbers must be unique per (bank, number) — see the
+// post_dated_cheque_bank_number_unique constraint — so a suffix keeps
+// these literal-looking cheque numbers from colliding with a prior run's
+// rows when the same local database is reused across repeated `pnpm test`
+// invocations (CI always seeds a fresh database, so this never matters
+// there).
+const CHQ_SUFFIX = Date.now();
 
 beforeAll(async () => {
   admin = await adminToken();
@@ -210,7 +217,7 @@ describe("post-dated cheque lifecycle", () => {
         receivedAt: new Date().toISOString(),
         allocationMode: "fifo",
         bankName: "Arab Bank",
-        chequeNumber: "CHQ-001",
+        chequeNumber: `CHQ-001-${CHQ_SUFFIX}`,
         chequeDueDate: "2026-06-01T00:00:00.000Z",
       });
     expect(collectionRes.status).toBe(201);
@@ -248,7 +255,7 @@ describe("post-dated cheque lifecycle", () => {
         receivedAt: new Date().toISOString(),
         allocationMode: "fifo",
         bankName: "Cairo Amman Bank",
-        chequeNumber: "CHQ-002",
+        chequeNumber: `CHQ-002-${CHQ_SUFFIX}`,
         chequeDueDate: "2026-06-01T00:00:00.000Z",
       });
     const pdcId = collectionRes.body.postDatedCheque.id as string;
@@ -284,7 +291,7 @@ describe("post-dated cheque lifecycle", () => {
         receivedAt: new Date().toISOString(),
         allocationMode: "fifo",
         bankName: "Housing Bank",
-        chequeNumber: "CHQ-003",
+        chequeNumber: `CHQ-003-${CHQ_SUFFIX}`,
         chequeDueDate: "2026-06-01T00:00:00.000Z",
       });
     const pdcId = collectionRes.body.postDatedCheque.id as string;
@@ -311,7 +318,7 @@ describe("post-dated cheque lifecycle", () => {
         receivedAt: new Date().toISOString(),
         allocationMode: "fifo",
         bankName: "Jordan Bank",
-        chequeNumber: "CHQ-004",
+        chequeNumber: `CHQ-004-${CHQ_SUFFIX}`,
         chequeDueDate: "2026-06-01T00:00:00.000Z",
       });
     const pdcId = collectionRes.body.postDatedCheque.id as string;
@@ -334,13 +341,58 @@ describe("post-dated cheque lifecycle", () => {
         receivedAt: new Date().toISOString(),
         allocationMode: "fifo",
         bankName: "Standard Chartered",
-        chequeNumber: "CHQ-005",
+        chequeNumber: `CHQ-005-${CHQ_SUFFIX}`,
         chequeDueDate: "2026-06-01T00:00:00.000Z",
       });
 
     const res = await request(app).get("/api/post-dated-cheques").query({ status: "pending", pageSize: 100 }).set("Authorization", `Bearer ${admin}`);
     expect(res.status).toBe(200);
-    expect(res.body.items.some((p: { chequeNumber: string }) => p.chequeNumber === "CHQ-005")).toBe(true);
+    expect(res.body.items.some((p: { chequeNumber: string }) => p.chequeNumber === `CHQ-005-${CHQ_SUFFIX}`)).toBe(true);
+  });
+
+  it("rejects registering the same bank+cheque-number twice, leaving no duplicate collection row behind", async () => {
+    const customerId = await createCustomer();
+    await createIssuedInvoice(customerId, "1", 5);
+    const chequeNumber = `CHQ-DUP-${CHQ_SUFFIX}`;
+
+    const firstRes = await request(app)
+      .post("/api/collections")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({
+        customerId,
+        branchId,
+        method: "post_dated_cheque",
+        amountJod: "10.000",
+        receivedAt: new Date().toISOString(),
+        allocationMode: "fifo",
+        bankName: "Duplicate Test Bank",
+        chequeNumber,
+        chequeDueDate: "2026-06-01T00:00:00.000Z",
+      });
+    expect(firstRes.status).toBe(201);
+
+    const secondCustomerId = await createCustomer();
+    await createIssuedInvoice(secondCustomerId, "1", 5);
+    const secondRes = await request(app)
+      .post("/api/collections")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({
+        customerId: secondCustomerId,
+        branchId,
+        method: "post_dated_cheque",
+        amountJod: "10.000",
+        receivedAt: new Date().toISOString(),
+        allocationMode: "fifo",
+        bankName: "Duplicate Test Bank",
+        chequeNumber,
+        chequeDueDate: "2026-07-01T00:00:00.000Z",
+      });
+    expect(secondRes.status).toBe(400);
+
+    // The rejected attempt must not have left a second collection row
+    // (same bank+cheque-number) or an orphaned collection with no PDC.
+    const listRes = await request(app).get("/api/collections").query({ customerId: secondCustomerId, pageSize: 100 }).set("Authorization", `Bearer ${admin}`);
+    expect((listRes.body.items as unknown[]).length).toBe(0);
   });
 });
 

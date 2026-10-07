@@ -1,0 +1,1 @@
+ALTER TABLE "post_dated_cheque" ADD CONSTRAINT "post_dated_cheque_bank_number_unique" UNIQUE("company_id","bank_name","cheque_number");

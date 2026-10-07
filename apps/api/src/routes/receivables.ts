@@ -208,6 +208,17 @@ receivablesRouter.post(
       const [branchRow] = await tx.select().from(branch).where(eq(branch.id, input.branchId));
       if (!branchRow) return { kind: "branch_not_found" as const };
 
+      // Checked upfront, before the collection row is inserted below: a
+      // rejected duplicate-cheque result returned later would still let
+      // that insert commit (Drizzle only rolls back on a thrown error).
+      if (input.method === "post_dated_cheque") {
+        const [existingPdc] = await tx
+          .select({ id: postDatedCheque.id })
+          .from(postDatedCheque)
+          .where(and(eq(postDatedCheque.bankName, input.bankName!), eq(postDatedCheque.chequeNumber, input.chequeNumber!)));
+        if (existingPdc) return { kind: "duplicate_cheque" as const };
+      }
+
       // Row-locked so a concurrent collection against the same customer's
       // invoices can't compute allocation off a stale outstanding figure.
       const openInvoices = await tx
@@ -273,6 +284,14 @@ receivablesRouter.post(
       if (!collectionRow) throw new Error("collection insert returned no row");
 
       if (input.method === "post_dated_cheque") {
+        // Deliberately a plain insert, not onConflictDoNothing: the
+        // upfront check above already turns the common case into a clean
+        // 400 before any write happens. For the rare remaining race (two
+        // concurrent requests for the exact same bank+cheque-number), a
+        // unique-constraint violation here throws, correctly rolling back
+        // this transaction's collection-row insert too — the one case
+        // where "fail with a raw 500" is the right tradeoff over risking
+        // the same partial-commit bug the upfront check exists to avoid.
         await tx.insert(postDatedCheque).values({
           companyId: req.auth!.companyId,
           branchId: input.branchId,
@@ -336,6 +355,10 @@ receivablesRouter.post(
     }
     if (result.kind === "invalid_allocation") {
       res.status(400).json(validationError({ allocations: result.reason }));
+      return;
+    }
+    if (result.kind === "duplicate_cheque") {
+      res.status(400).json(validationError({ chequeNumber: "this bank and cheque number is already registered" }));
       return;
     }
     const detail = await withTenant(db, req.auth!.companyId, (tx) => loadCollectionDetail(tx, result.collectionId));

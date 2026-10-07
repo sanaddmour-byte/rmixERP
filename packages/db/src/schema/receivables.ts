@@ -1,4 +1,4 @@
-import { bigint, pgEnum, pgTable, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import { bigint, pgEnum, pgTable, timestamp, unique, uuid, varchar } from "drizzle-orm/pg-core";
 import { auditColumns, idColumn, tenantIsolationPolicy } from "./columns";
 import { company } from "./company";
 import { branch } from "./branch";
@@ -111,7 +111,12 @@ export const postDatedCheque = pgTable(
     bounceReason: varchar("bounce_reason", { length: 500 }),
     ...auditColumns(),
   },
-  () => [tenantIsolationPolicy()],
+  // The same physical cheque (bank + its own cheque number) can never be
+  // registered twice for this tenant — a real DB invariant, not just an
+  // application-level check, matching this codebase's convention of
+  // enforcing document-uniqueness in the database (e.g. invoice_line's
+  // deliveryOrderId+taxTreatment constraint) rather than trusting routes.
+  (t) => [tenantIsolationPolicy(), unique("post_dated_cheque_bank_number_unique").on(t.companyId, t.bankName, t.chequeNumber)],
 ).enableRLS();
 
 export type PostDatedCheque = typeof postDatedCheque.$inferSelect;
