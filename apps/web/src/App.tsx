@@ -1,5 +1,7 @@
 import { Route, Switch } from "wouter";
+import { Toaster } from "@rmixerp/ui";
 import { Sidebar } from "./components/Sidebar";
+import { CommandPalette } from "./components/CommandPalette";
 import { HomePage } from "./routes/HomePage";
 import { ReportsPage } from "./routes/ReportsPage";
 import { HealthPage } from "./routes/HealthPage";
@@ -39,13 +41,17 @@ import { GLReportsPage } from "./routes/GLReportsPage";
 import { FleetOpsAlertsPage } from "./routes/FleetOpsAlertsPage";
 import { ApprovalsInboxPage } from "./routes/ApprovalsInboxPage";
 import { NotificationsPage } from "./routes/NotificationsPage";
+import { ActionCenterPage } from "./routes/ActionCenterPage";
 
 export function App() {
   return (
     <div className="flex min-h-screen bg-navy-50 text-navy-900 dark:bg-navy-950 dark:text-navy-100">
       <Sidebar />
+      <CommandPalette />
+      <Toaster />
       <main className="min-w-0 flex-1 p-6">
         <Switch>
+          <Route path="/action-center" component={ActionCenterPage} />
           <Route path="/login" component={LoginPage} />
           <Route path="/health" component={HealthPage} />
           <Route path="/reports" component={ReportsPage} />

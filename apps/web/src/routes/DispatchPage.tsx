@@ -13,28 +13,43 @@ import {
   useListTrucks,
   type DeliveryOrder,
 } from "@rmixerp/contract";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@rmixerp/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, Drawer, Input } from "@rmixerp/ui";
 import { refetchOnSuccess } from "../lib/refetchOnSuccess";
 import { useModulePermissions } from "../lib/usePermissions";
+import { DELIVERY_ORDER_STATUS_TONE } from "../lib/statusRegistry";
+import { StatusBadge } from "../components/StatusBadge";
 
 type DeliveryOrderStatus = DeliveryOrder["status"];
 
-const STATUS_COLOR: Record<DeliveryOrderStatus, string> = {
-  planned: "#94a3b8",
-  dispatched: "#f2660f",
-  delivered: "#15803d",
-  invoiced: "#0f2440",
+// Semantic tones, not raw hex (docs/ui-ux-audit.md §9.3's finding that
+// this board previously hardcoded literal colors outside the token
+// system entirely) — resolved to the same CSS custom properties every
+// other status indicator in the app uses.
+const STATUS_VAR: Record<DeliveryOrderStatus, string> = {
+  planned: "var(--color-text-subtle)",
+  dispatched: "var(--color-warning)",
+  delivered: "var(--color-success)",
+  invoiced: "var(--color-info)",
 };
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function GanttBoard({ branchId, date }: { branchId: string; date: string }) {
+function GanttBoard({ branchId, date, onSelect }: { branchId: string; date: string; onSelect: (id: string) => void }) {
   const from = `${date}T00:00:00.000Z`;
   const to = `${date}T23:59:59.000Z`;
   const schedule = useGetDispatchSchedule({ branchId, from, to }, { query: { enabled: Boolean(branchId) } });
   const items = schedule.data?.status === 200 ? schedule.data.data.items : [];
+
+  // Resolved client-side against the lists the "today's deliveries" board
+  // already needs anyway — no new endpoint, per docs/ui-ux-audit.md §10's
+  // scoping (a full fleet-utilization panel is backlog; this is just
+  // "show which truck/driver" on a block that already links to one).
+  const trucks = useListTrucks({ page: 1, pageSize: 100 });
+  const truckById = new Map((trucks.data?.status === 200 ? trucks.data.data.items : []).map((t) => [t.id, t.plateNumber]));
+  const drivers = useListDrivers({ page: 1, pageSize: 100 });
+  const driverById = new Map((drivers.data?.status === 200 ? drivers.data.data.items : []).map((d) => [d.id, d.name]));
 
   function hourOf(iso: string) {
     const d = new Date(iso);
@@ -63,10 +78,23 @@ function GanttBoard({ branchId, date }: { branchId: string; date: string }) {
             const plannedHour = hourOf(item.scheduledAt);
             const actualStart = item.dispatchedAt ? hourOf(item.dispatchedAt) : null;
             const actualEnd = item.deliveredAt ? hourOf(item.deliveredAt) : null;
+            const truckLabel = item.truckId ? truckById.get(item.truckId) : null;
+            const driverLabel = item.driverId ? driverById.get(item.driverId) : null;
             return (
-              <div key={item.id} className="flex items-center gap-2 text-xs">
-                <div className="w-40 shrink-0 truncate text-navy-700 dark:text-navy-300">
-                  {item.customerName} {item.qcFlagged && <span className="text-orange-600">(QC failed)</span>}
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onSelect(item.id)}
+                className="flex w-full items-center gap-2 rounded text-xs hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
+              >
+                <div className="w-44 shrink-0 truncate text-start text-navy-700 dark:text-navy-300">
+                  <span className="font-medium">{item.customerName}</span> — {item.quantityM3} m³
+                  {item.qcFlagged && <span className="ms-1 text-danger">(QC failed)</span>}
+                  {(truckLabel || driverLabel) && (
+                    <span className="block text-text-subtle">
+                      {[truckLabel, driverLabel].filter(Boolean).join(" · ")}
+                    </span>
+                  )}
                 </div>
                 <div className="relative h-6 flex-1 rounded bg-navy-50 dark:bg-navy-800">
                   <div
@@ -80,16 +108,16 @@ function GanttBoard({ branchId, date }: { branchId: string; date: string }) {
                       style={{
                         left: pct(actualStart),
                         width: pct(Math.max(0.3, (actualEnd ?? actualStart + 0.5) - actualStart)),
-                        backgroundColor: STATUS_COLOR[item.status],
+                        backgroundColor: STATUS_VAR[item.status],
                       }}
                       title={`${item.status} — ${new Date(item.dispatchedAt ?? item.scheduledAt).toLocaleTimeString()}`}
                     />
                   )}
                 </div>
-                <span className="w-20 shrink-0 capitalize" style={{ color: STATUS_COLOR[item.status] }}>
+                <span className="w-20 shrink-0 text-start capitalize" style={{ color: STATUS_VAR[item.status] }}>
                   {item.status}
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>
@@ -325,7 +353,7 @@ export function DispatchPage() {
         </CardContent>
       </Card>
 
-      {effectiveBranchId && <GanttBoard branchId={effectiveBranchId} date={date} />}
+      {effectiveBranchId && <GanttBoard branchId={effectiveBranchId} date={date} onSelect={setSelectedId} />}
 
       {permissions.create && (
         <Card>
@@ -423,7 +451,9 @@ export function DispatchPage() {
                   className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800"
                   onClick={() => setSelectedId(row.id)}
                 >
-                  <td className="py-2 pe-4 capitalize">{row.status}</td>
+                  <td className="py-2 pe-4">
+                    <StatusBadge label={row.status} tone={DELIVERY_ORDER_STATUS_TONE[row.status] ?? "gray"} />
+                  </td>
                   <td className="py-2 pe-4">{row.quantityM3}</td>
                   <td className="py-2 pe-4">{new Date(row.scheduledAt).toLocaleString()}</td>
                   <td className="py-2 pe-4">{row.qcFlagged && <span className="text-orange-600">Flagged</span>}</td>
@@ -447,7 +477,9 @@ export function DispatchPage() {
         </CardContent>
       </Card>
 
-      {selectedId && <DeliveryOrderDetailPanel id={selectedId} onChanged={() => void list.refetch()} />}
+      <Drawer open={selectedId !== null} onClose={() => setSelectedId(null)} title="Delivery detail">
+        {selectedId && <DeliveryOrderDetailPanel id={selectedId} onChanged={() => void list.refetch()} />}
+      </Drawer>
     </div>
   );
 }

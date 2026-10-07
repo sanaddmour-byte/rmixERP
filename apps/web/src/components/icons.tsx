@@ -46,7 +46,9 @@ export type IconName =
   | "logOut"
   | "sun"
   | "moon"
-  | "bell";
+  | "bell"
+  | "search"
+  | "alertTriangle";
 
 const PATHS: Record<IconName, React.ReactNode> = {
   briefcase: (
@@ -268,9 +270,32 @@ const PATHS: Record<IconName, React.ReactNode> = {
       <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
     </>
   ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </>
+  ),
+  alertTriangle: (
+    <>
+      <path d="M12 2 1 21h22L12 2Z" />
+      <line x1="12" y1="9" x2="12" y2="14" />
+      <line x1="12" y1="17.5" x2="12" y2="17.51" />
+    </>
+  ),
 };
 
+/**
+ * Icon names whose glyph has an inherent left/right direction and must
+ * mirror in RTL to keep meaning correct (docs/ui-ux-audit.md §7.2) —
+ * confirmed before this pass to be hardcoded one-direction regardless of
+ * locale. Every other icon (carets that rotate on state, symmetric
+ * glyphs) needs no entry here.
+ */
+const RTL_MIRRORED_ICONS = new Set<IconName>(["chevronRight", "chevronsLeft", "chevronsRight", "logOut"]);
+
 export function Icon({ name, className, ...props }: { name: IconName } & SVGProps<SVGSVGElement>) {
+  const mirrorInRtl = RTL_MIRRORED_ICONS.has(name);
   return (
     <svg
       viewBox="0 0 24 24"
@@ -279,7 +304,7 @@ export function Icon({ name, className, ...props }: { name: IconName } & SVGProp
       strokeWidth={1.75}
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={className}
+      className={mirrorInRtl ? `rtl:-scale-x-100 ${className ?? ""}` : className}
       aria-hidden="true"
       {...props}
     >

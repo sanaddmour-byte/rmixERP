@@ -169,13 +169,11 @@ export function MixDesignsPage() {
         onPageChange={setPage}
         onSearch={setQ}
         createFields={fields}
-        onCreate={(values) =>
-          create.mutate(
-            { data: toRequestBody(values) },
-            { onSuccess: (result) => result.status === 201 && setSelectedId(result.data.id) },
-          )
-        }
-        creating={create.isPending}
+        onCreate={async (values) => {
+          const result = await create.mutateAsync({ data: toRequestBody(values) });
+          if (result.status === 201) setSelectedId(result.data.id);
+          return result;
+        }}
         onVoid={(id) => voidMutation.mutate({ id, data: {} })}
         voiding={voidMutation.isPending}
         permissions={{ ...permissions, edit: false }}

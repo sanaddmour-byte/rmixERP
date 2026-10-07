@@ -17,19 +17,10 @@ import {
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@rmixerp/ui";
 import { refetchOnSuccess } from "../lib/refetchOnSuccess";
 import { useModulePermissions } from "../lib/usePermissions";
-import { StatusBadge, type BadgeTone } from "../components/StatusBadge";
+import { StatusBadge } from "../components/StatusBadge";
+import { PURCHASE_ORDER_STATUS_TONE } from "../lib/statusRegistry";
 
 type Status = PurchaseOrder["status"];
-
-const STATUS_TONE: Record<Status, BadgeTone> = {
-  draft: "gray",
-  submitted: "yellow",
-  approved: "green",
-  received: "green",
-  billed: "green",
-  rejected: "red",
-  cancelled: "gray",
-};
 
 function PurchaseOrderDetailPanel({ id }: { id: string }) {
   const detail = useGetPurchaseOrder(id);
@@ -64,7 +55,7 @@ function PurchaseOrderDetailPanel({ id }: { id: string }) {
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>
-          {o.poNumber} — <StatusBadge label={o.status} tone={STATUS_TONE[o.status]} />
+          {o.poNumber} — <StatusBadge label={o.status} tone={PURCHASE_ORDER_STATUS_TONE[o.status] ?? "gray"} />
         </CardTitle>
         <div className="flex gap-3 text-sm">
           <Link href={`/goods-receipts?purchaseOrderId=${id}`} className="text-orange-600 hover:underline dark:text-orange-400">
@@ -303,7 +294,7 @@ export function PurchaseOrdersPage() {
                 >
                   <td className="py-2 pe-4">{row.poNumber}</td>
                   <td className="py-2 pe-4">
-                    <StatusBadge label={row.status} tone={STATUS_TONE[row.status]} />
+                    <StatusBadge label={row.status} tone={PURCHASE_ORDER_STATUS_TONE[row.status] ?? "gray"} />
                   </td>
                   <td className="py-2 pe-4">{vendorOptions.find((v) => v.id === row.vendorId)?.name ?? row.vendorId}</td>
                   <td className="py-2 pe-4">{row.totalJod}</td>

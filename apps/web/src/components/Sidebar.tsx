@@ -88,7 +88,9 @@ export function Sidebar() {
         <nav className="flex-1 overflow-y-auto px-2 pb-2">
           <Link
             href="/"
-            className={`mb-2 flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium ${
+            title={collapsed ? t.nav.home : undefined}
+            aria-label={collapsed ? t.nav.home : undefined}
+            className={`mb-1 flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium ${
               location === "/"
                 ? "bg-navy-800 text-orange-400"
                 : "text-navy-200 hover:bg-navy-800 hover:text-white"
@@ -97,12 +99,28 @@ export function Sidebar() {
             <Icon name="home" className="h-4 w-4 shrink-0" />
             {!collapsed && <span>{t.nav.home}</span>}
           </Link>
+          <Link
+            href="/action-center"
+            title={collapsed ? t.nav.actionCenter : undefined}
+            aria-label={collapsed ? t.nav.actionCenter : undefined}
+            className={`mb-2 flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium ${
+              location === "/action-center"
+                ? "bg-navy-800 text-orange-400"
+                : "text-navy-200 hover:bg-navy-800 hover:text-white"
+            }`}
+          >
+            <Icon name="alertTriangle" className="h-4 w-4 shrink-0" />
+            {!collapsed && <span>{t.nav.actionCenter}</span>}
+          </Link>
 
           {groups.map((group) => (
             <div key={group.id} className="mb-1">
               <button
                 type="button"
                 onClick={() => toggleGroup(group.id)}
+                title={collapsed ? t.navGroups[group.labelKey] : undefined}
+                aria-label={collapsed ? t.navGroups[group.labelKey] : undefined}
+                aria-expanded={!collapsed && Boolean(openGroups[group.id])}
                 className={`flex w-full items-center rounded-md px-3 py-2 text-sm font-medium text-navy-200 hover:bg-navy-800 hover:text-white ${
                   collapsed ? "justify-center" : "justify-between"
                 }`}
@@ -167,6 +185,7 @@ export function Sidebar() {
             className="text-navy-200 hover:bg-navy-800 hover:text-orange-400"
             onClick={toggleTheme}
             title={theme === "dark" ? "Light mode" : "Dark mode"}
+            aria-label={theme === "dark" ? "Light mode" : "Dark mode"}
           >
             <Icon name={theme === "dark" ? "sun" : "moon"} className="h-4 w-4" />
             {!collapsed && <span>{theme === "dark" ? "Light mode" : "Dark mode"}</span>}
@@ -178,6 +197,7 @@ export function Sidebar() {
             className="text-navy-200 hover:bg-navy-800 hover:text-orange-400"
             onClick={toggleLocale}
             title={t.languageToggle}
+            aria-label={t.languageToggle}
           >
             <Icon name="globe" className="h-4 w-4" />
             {!collapsed && <span>{t.languageToggle}</span>}
@@ -190,6 +210,7 @@ export function Sidebar() {
               className="text-navy-200 hover:bg-navy-800 hover:text-orange-400"
               onClick={handleLogout}
               title={t.login.logout}
+              aria-label={t.login.logout}
             >
               <Icon name="logOut" className="h-4 w-4" />
               {!collapsed && <span>{t.login.logout}</span>}

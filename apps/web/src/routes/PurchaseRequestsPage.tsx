@@ -16,17 +16,10 @@ import {
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@rmixerp/ui";
 import { refetchOnSuccess } from "../lib/refetchOnSuccess";
 import { useModulePermissions } from "../lib/usePermissions";
-import { StatusBadge, type BadgeTone } from "../components/StatusBadge";
+import { StatusBadge } from "../components/StatusBadge";
+import { PURCHASE_REQUEST_STATUS_TONE as STATUS_TONE } from "../lib/statusRegistry";
 
 type Status = PurchaseRequest["status"];
-
-const STATUS_TONE: Record<Status, BadgeTone> = {
-  draft: "gray",
-  submitted: "yellow",
-  approved: "green",
-  rejected: "red",
-  cancelled: "gray",
-};
 
 function PurchaseRequestDetailPanel({ id, onConvert }: { id: string; onConvert: (prId: string) => void }) {
   const detail = useGetPurchaseRequest(id);
@@ -59,7 +52,7 @@ function PurchaseRequestDetailPanel({ id, onConvert }: { id: string; onConvert: 
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>
-          {p.requestNumber} — <StatusBadge label={p.status} tone={STATUS_TONE[p.status]} />
+          {p.requestNumber} — <StatusBadge label={p.status} tone={STATUS_TONE[p.status] ?? "gray"} />
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -256,7 +249,7 @@ export function PurchaseRequestsPage() {
                 >
                   <td className="py-2 pe-4">{row.requestNumber}</td>
                   <td className="py-2 pe-4">
-                    <StatusBadge label={row.status} tone={STATUS_TONE[row.status]} />
+                    <StatusBadge label={row.status} tone={STATUS_TONE[row.status] ?? "gray"} />
                   </td>
                   <td className="py-2 pe-4">{row.neededByDate ? new Date(row.neededByDate).toLocaleDateString() : "—"}</td>
                 </tr>

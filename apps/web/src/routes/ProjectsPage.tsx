@@ -81,11 +81,9 @@ export function ProjectsPage() {
       onSearch={setQ}
       csvUrl={`/api/projects?format=csv${q ? `&q=${encodeURIComponent(q)}` : ""}`}
       createFields={fields}
-      onCreate={(values) => create.mutate({ data: toRequestBody(values) })}
-      creating={create.isPending}
+      onCreate={(values) => create.mutateAsync({ data: toRequestBody(values) })}
       editFields={fields.filter((f) => f.name !== "customerId")}
-      onUpdate={(id, values) => update.mutate({ id, data: toRequestBody(values) })}
-      updating={update.isPending}
+      onUpdate={(id, values) => update.mutateAsync({ id, data: toRequestBody(values) })}
       onVoid={(id) => voidMutation.mutate({ id, data: {} })}
       voiding={voidMutation.isPending}
       permissions={permissions}

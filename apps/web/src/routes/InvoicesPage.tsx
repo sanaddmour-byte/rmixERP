@@ -12,7 +12,7 @@ import {
   useSubmitInvoiceForClearance,
   type Invoice,
 } from "@rmixerp/contract";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@rmixerp/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, Code, Input } from "@rmixerp/ui";
 import { refetchOnSuccess } from "../lib/refetchOnSuccess";
 import { useModulePermissions } from "../lib/usePermissions";
 
@@ -120,7 +120,7 @@ function InvoiceDetailPanel({ id, onSelect }: { id: string; onSelect: (id: strin
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>
-          Invoice {inv.invoiceNumber} — <span className="capitalize">{inv.status.replace(/_/g, " ")}</span>
+          Invoice <Code>{inv.invoiceNumber}</Code> — <span className="capitalize">{inv.status.replace(/_/g, " ")}</span>
         </CardTitle>
         {clearancePermissions.create && (
           <div className="flex gap-2">
@@ -335,7 +335,9 @@ export function InvoicesPage() {
                   className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800"
                   onClick={() => setSelectedId(row.id)}
                 >
-                  <td className="py-2 pe-4">{row.invoiceNumber}</td>
+                  <td className="py-2 pe-4">
+                    <Code>{row.invoiceNumber}</Code>
+                  </td>
                   <td className="py-2 pe-4">
                     <Link
                       href={`/receivables-reports?customerId=${row.customerId}`}

@@ -9,19 +9,13 @@ import {
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@rmixerp/ui";
 import { refetchOnSuccess } from "../lib/refetchOnSuccess";
 import { useModulePermissions } from "../lib/usePermissions";
-import { StatusBadge, type BadgeTone } from "../components/StatusBadge";
+import { StatusBadge } from "../components/StatusBadge";
+import { CLEARANCE_STATUS_TONE } from "../lib/statusRegistry";
 
 type ClearanceStatus = ClearanceQueueItem["clearanceStatus"];
 type DocumentType = ClearanceQueueItem["documentType"];
 
 const PAGE_SIZE = 20;
-
-const CLEARANCE_STATUS_TONE: Record<ClearanceStatus, BadgeTone> = {
-  pending: "yellow",
-  retrying: "yellow",
-  cleared: "green",
-  rejected: "red",
-};
 
 /**
  * Back-office admin queue across invoices, credit notes, and debit notes
@@ -127,7 +121,7 @@ export function ClearanceQueuePage() {
                 <td className="py-2 pe-4">{item.documentNumber}</td>
                 <td className="py-2 pe-4 capitalize">{item.documentType.replace(/_/g, " ")}</td>
                 <td className="py-2 pe-4">
-                  <StatusBadge label={item.clearanceStatus} tone={CLEARANCE_STATUS_TONE[item.clearanceStatus]} />
+                  <StatusBadge label={item.clearanceStatus} tone={CLEARANCE_STATUS_TONE[item.clearanceStatus] ?? "gray"} />
                 </td>
                 <td className="py-2 pe-4">{item.clearanceAttempts}</td>
                 <td className="py-2 pe-4">{item.clearanceIcv ?? "—"}</td>

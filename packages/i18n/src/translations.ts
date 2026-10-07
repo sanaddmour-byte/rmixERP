@@ -48,15 +48,42 @@ export interface Translations {
     approvalsInbox: string;
     fleetAlerts: string;
     syncQueue: string;
+    actionCenter: string;
   };
   navGroups: {
     approvals: string;
     sales: string;
     operations: string;
+    quality: string;
     procurement: string;
     finance: string;
     reports: string;
     administration: string;
+  };
+  commandPalette: {
+    title: string;
+    placeholder: string;
+    noResults: string;
+  };
+  actionCenterPage: {
+    title: string;
+    subtitle: string;
+    empty: string;
+    loading: string;
+    severityHigh: string;
+    severityMedium: string;
+    creditBlockedTitle: string;
+    creditBlockedDesc: (exposure: string, limit: string) => string;
+    failedClearanceTitle: string;
+    failedClearanceDesc: (docNumber: string) => string;
+    bouncedChequeTitle: string;
+    bouncedChequeDesc: (chequeNumber: string, bank: string) => string;
+    failedQcTitle: string;
+    failedQcDesc: (batchNumber: string) => string;
+    pendingApprovalTitle: string;
+    pendingApprovalDesc: (docNumber: string) => string;
+    reviewAction: string;
+    openAction: string;
   };
   home: {
     welcome: (name: string) => string;
@@ -163,15 +190,42 @@ export const translations: Record<Locale, Translations> = {
       approvalsInbox: "Approvals Inbox",
       fleetAlerts: "Fleet Alerts",
       syncQueue: "Sync Queue",
+      actionCenter: "Action Center",
     },
     navGroups: {
       approvals: "Approvals",
       sales: "Sales",
       operations: "Operations",
+      quality: "Quality",
       procurement: "Procurement",
       finance: "Finance",
       reports: "Reports",
       administration: "Administration",
+    },
+    commandPalette: {
+      title: "Quick navigation",
+      placeholder: "Search for a module…",
+      noResults: "No matches.",
+    },
+    actionCenterPage: {
+      title: "Action Center",
+      subtitle: "Exceptions across the business that need a decision — not a notification feed.",
+      empty: "Nothing needs your attention right now.",
+      loading: "Checking for exceptions…",
+      severityHigh: "High",
+      severityMedium: "Medium",
+      creditBlockedTitle: "Customer credit exceeded",
+      creditBlockedDesc: (exposure, limit) => `Exposure: ${exposure} JOD — Limit: ${limit} JOD`,
+      failedClearanceTitle: "E-invoice failed",
+      failedClearanceDesc: (docNumber) => `Document ${docNumber} could not be cleared.`,
+      bouncedChequeTitle: "Returned cheque",
+      bouncedChequeDesc: (chequeNumber, bank) => `Cheque ${chequeNumber} — ${bank}`,
+      failedQcTitle: "Failed QC test",
+      failedQcDesc: (batchNumber) => `Batch ${batchNumber} did not meet its design strength.`,
+      pendingApprovalTitle: "Approval needed",
+      pendingApprovalDesc: (docNumber) => `${docNumber} is waiting on your approval.`,
+      reviewAction: "Review",
+      openAction: "Open",
     },
     home: {
       welcome: (name) => `Welcome back, ${name}`,
@@ -276,15 +330,42 @@ export const translations: Record<Locale, Translations> = {
       approvalsInbox: "صندوق الموافقات",
       fleetAlerts: "تنبيهات الأسطول",
       syncQueue: "قائمة المزامنة",
+      actionCenter: "مركز الإجراءات",
     },
     navGroups: {
       approvals: "الموافقات",
       sales: "المبيعات",
       operations: "العمليات",
+      quality: "الجودة",
       procurement: "المشتريات",
       finance: "المالية",
       reports: "التقارير",
       administration: "الإدارة",
+    },
+    commandPalette: {
+      title: "التنقل السريع",
+      placeholder: "ابحث عن وحدة…",
+      noResults: "لا توجد نتائج مطابقة.",
+    },
+    actionCenterPage: {
+      title: "مركز الإجراءات",
+      subtitle: "استثناءات في الأعمال تتطلب قراراً — وليست قائمة إشعارات.",
+      empty: "لا يوجد ما يتطلب اهتمامك الآن.",
+      loading: "جاري التحقق من الاستثناءات…",
+      severityHigh: "عالية",
+      severityMedium: "متوسطة",
+      creditBlockedTitle: "تجاوز العميل الحد الائتماني",
+      creditBlockedDesc: (exposure, limit) => `المبلغ المستحق: ${exposure} د.أ — الحد: ${limit} د.أ`,
+      failedClearanceTitle: "فشل تخليص الفاتورة الإلكترونية",
+      failedClearanceDesc: (docNumber) => `تعذّر تخليص المستند ${docNumber}.`,
+      bouncedChequeTitle: "شيك مرتجع",
+      bouncedChequeDesc: (chequeNumber, bank) => `شيك ${chequeNumber} — ${bank}`,
+      failedQcTitle: "فشل اختبار الجودة",
+      failedQcDesc: (batchNumber) => `الدفعة ${batchNumber} لم تحقق قوة التصميم المطلوبة.`,
+      pendingApprovalTitle: "موافقة مطلوبة",
+      pendingApprovalDesc: (docNumber) => `${docNumber} في انتظار موافقتك.`,
+      reviewAction: "مراجعة",
+      openAction: "فتح",
     },
     home: {
       welcome: (name) => `مرحباً بعودتك، ${name}`,

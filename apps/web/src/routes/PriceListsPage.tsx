@@ -188,7 +188,7 @@ export function PriceListsPage() {
         csvUrl={`/api/price-lists?format=csv${q ? `&q=${encodeURIComponent(q)}` : ""}`}
         createFields={fields}
         onCreate={(values: FormValues) =>
-          create.mutate({
+          create.mutateAsync({
             data: {
               name: String(values.name ?? ""),
               tier: String(values.tier ?? "company") as "company" | "branch" | "customer" | "project",
@@ -197,7 +197,6 @@ export function PriceListsPage() {
             },
           })
         }
-        creating={create.isPending}
         onVoid={(id) => voidMutation.mutate({ id, data: {} })}
         voiding={voidMutation.isPending}
         permissions={{ ...permissions, edit: false }}

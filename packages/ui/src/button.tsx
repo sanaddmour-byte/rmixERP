@@ -12,6 +12,11 @@ export const buttonVariants = cva(
           "border border-navy-300 bg-white hover:bg-navy-50 focus-visible:ring-navy-400 dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100 dark:hover:bg-navy-800",
         ghost: "hover:bg-navy-50 focus-visible:ring-navy-400 dark:text-navy-100 dark:hover:bg-navy-800",
         accent: "bg-orange-500 text-white hover:bg-orange-600 focus-visible:ring-orange-500",
+        // Void/cancel/reject/delete/reverse — never visually similar to
+        // `ghost` (every other row action) or `accent` (the primary
+        // action), per docs/ui-ux-audit.md §3: a destructive action must
+        // not compete with or be mistaken for either.
+        destructive: "bg-danger text-white hover:opacity-90 focus-visible:ring-danger",
       },
       size: {
         default: "h-10 px-4 py-2",

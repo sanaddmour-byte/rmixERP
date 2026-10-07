@@ -12,17 +12,10 @@ import {
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@rmixerp/ui";
 import { refetchOnSuccess } from "../lib/refetchOnSuccess";
 import { useModulePermissions } from "../lib/usePermissions";
-import { StatusBadge, type BadgeTone } from "../components/StatusBadge";
+import { StatusBadge } from "../components/StatusBadge";
+import { VENDOR_BILL_STATUS_TONE } from "../lib/statusRegistry";
 
 type Status = VendorBill["status"];
-
-const STATUS_TONE: Record<Status, BadgeTone> = {
-  draft: "gray",
-  approved: "yellow",
-  partially_paid: "yellow",
-  paid: "green",
-  cancelled: "gray",
-};
 
 function BillAgainstPurchaseOrder({ purchaseOrderId, onBilled }: { purchaseOrderId: string; onBilled: () => void }) {
   const po = useGetPurchaseOrder(purchaseOrderId);
@@ -226,7 +219,7 @@ export function VendorBillsPage() {
                 <tr key={row.id} className="border-b border-navy-100 dark:border-navy-800">
                   <td className="py-2 pe-4">{row.billNumber}</td>
                   <td className="py-2 pe-4">
-                    <StatusBadge label={row.status.replace(/_/g, " ")} tone={STATUS_TONE[row.status]} />
+                    <StatusBadge label={row.status.replace(/_/g, " ")} tone={VENDOR_BILL_STATUS_TONE[row.status] ?? "gray"} />
                   </td>
                   <td className="py-2 pe-4">{row.totalJod}</td>
                   <td className="py-2 pe-4">{row.allocatedJod}</td>

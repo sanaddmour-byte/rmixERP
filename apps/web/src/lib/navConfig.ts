@@ -1,6 +1,6 @@
 import type { Translations } from "@rmixerp/i18n";
 
-export type NavGroupId = "approvals" | "sales" | "operations" | "procurement" | "finance" | "reports" | "admin";
+export type NavGroupId = "approvals" | "sales" | "operations" | "quality" | "procurement" | "finance" | "reports" | "admin";
 
 export interface NavItem {
   href: string;
@@ -62,14 +62,24 @@ export const NAV_GROUPS: NavGroup[] = [
     labelKey: "operations",
     icon: "layers",
     items: [
-      { href: "/mix-designs", labelKey: "mixDesigns", module: "mixDesigns", icon: "flask" },
       { href: "/inventory", labelKey: "inventory", module: "inventory", icon: "database" },
       { href: "/production-orders", labelKey: "productionOrders", module: "productionOrders", icon: "clipboard" },
-      { href: "/qc", labelKey: "qc", module: "qc", icon: "checkCircle" },
       { href: "/trucks", labelKey: "trucks", module: "trucks", icon: "truck" },
       { href: "/drivers", labelKey: "drivers", module: "drivers", icon: "idCard" },
       { href: "/dispatch", labelKey: "dispatch", module: "deliveryOrders", icon: "calendar" },
       { href: "/fleet-alerts", labelKey: "fleetAlerts", module: "trucks", icon: "fileClock" },
+    ],
+  },
+  {
+    // Split out of "operations" (docs/ui-ux-audit.md §8.2): QA is a
+    // distinct function from day-to-day dispatch/production, and the
+    // combined group had grown to 8 undifferentiated items.
+    id: "quality",
+    labelKey: "quality",
+    icon: "checkCircle",
+    items: [
+      { href: "/mix-designs", labelKey: "mixDesigns", module: "mixDesigns", icon: "flask" },
+      { href: "/qc", labelKey: "qc", module: "qc", icon: "checkCircle" },
     ],
   },
   {

@@ -7,6 +7,8 @@ import {
 } from "@rmixerp/contract";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@rmixerp/ui";
 import { NotificationsPanel } from "../components/NotificationsPanel";
+import { StatusBadge } from "../components/StatusBadge";
+import { qcResultLabel, qcResultTone } from "../lib/statusRegistry";
 
 function CubeTestDetail({ id }: { id: string }) {
   const detail = useGetCubeTestTraceability(id);
@@ -128,17 +130,7 @@ export function QCPage() {
                     <td className="py-2 pe-4">{item.ageDays}d</td>
                     <td className="py-2 pe-4">{item.averageStrengthMpa}</td>
                     <td className="py-2 pe-4">
-                      <span
-                        className={
-                          item.pass === false
-                            ? "rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-800"
-                            : item.pass === true
-                              ? "rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800"
-                              : "rounded-full bg-navy-100 px-2 py-0.5 text-xs font-medium text-navy-600 dark:text-navy-300"
-                        }
-                      >
-                        {item.pass === null ? "Pending" : item.pass ? "Pass" : "Fail"}
-                      </span>
+                      <StatusBadge label={qcResultLabel(item.pass)} tone={qcResultTone(item.pass)} />
                     </td>
                   </tr>
                   {expandedId === item.id && (

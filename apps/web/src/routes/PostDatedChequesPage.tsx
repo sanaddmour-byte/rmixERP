@@ -10,17 +10,10 @@ import {
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@rmixerp/ui";
 import { refetchOnSuccess } from "../lib/refetchOnSuccess";
 import { useModulePermissions } from "../lib/usePermissions";
-import { StatusBadge, type BadgeTone } from "../components/StatusBadge";
+import { StatusBadge } from "../components/StatusBadge";
+import { PDC_STATUS_TONE } from "../lib/statusRegistry";
 
 type Status = PostDatedCheque["status"];
-
-const PDC_STATUS_TONE: Record<Status, BadgeTone> = {
-  pending: "yellow",
-  deposited: "yellow",
-  cleared: "green",
-  bounced: "red",
-  cancelled: "gray",
-};
 
 export function PostDatedChequesPage() {
   const permissions = useModulePermissions("postDatedCheques");
@@ -82,7 +75,7 @@ export function PostDatedChequesPage() {
                 <td className="py-2 pe-4">{cheque.chequeNumber}</td>
                 <td className="py-2 pe-4">{new Date(cheque.dueDate).toLocaleDateString()}</td>
                 <td className="py-2 pe-4">
-                  <StatusBadge label={cheque.status} tone={PDC_STATUS_TONE[cheque.status]} />
+                  <StatusBadge label={cheque.status} tone={PDC_STATUS_TONE[cheque.status] ?? "gray"} />
                   {cheque.bounceReason && <span className="ms-2 text-xs text-orange-700">({cheque.bounceReason})</span>}
                 </td>
                 <td className="py-2 pe-4">

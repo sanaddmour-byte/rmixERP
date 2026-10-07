@@ -1,6 +1,7 @@
 import * as React from "react";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@rmixerp/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, ConfirmDialog, Input, TableSkeleton } from "@rmixerp/ui";
 import { useLanguage } from "../i18n/LanguageContext";
+import { throwIfApiError } from "../lib/apiResult";
 
 export interface Column<T> {
   key: keyof T;
@@ -21,92 +22,122 @@ export type FormValues = Record<string, string | boolean | string[]>;
 interface ResourceFormProps {
   fields: FieldConfig[];
   initialValues?: FormValues;
-  onSubmit: (values: FormValues) => void;
+  /** Awaited: the panel only closes once this resolves, and stays open with the error shown (data intact) if it rejects — see docs/ui-ux-audit.md §4/§9. */
+  onSubmit: (values: FormValues) => Promise<unknown>;
   onCancel: () => void;
-  pending: boolean;
-  error?: string | null | undefined;
   submitLabel: string;
 }
 
-function ResourceForm({ fields, initialValues, onSubmit, onCancel, pending, error, submitLabel }: ResourceFormProps) {
+function ResourceForm({ fields, initialValues, onSubmit, onCancel, submitLabel }: ResourceFormProps) {
   const [values, setValues] = React.useState<FormValues>(() => initialValues ?? {});
+  const [pending, setPending] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const errorId = React.useId();
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    onSubmit(values);
+    setPending(true);
+    setError(null);
+    try {
+      const result = await onSubmit(values);
+      throwIfApiError(result);
+      // onCancel just unmounts this form — reused here for "close on success" too, since the parent owns the open/closed state either way.
+      onCancel();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save this — please check the fields and try again.");
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3 p-4">
-      {fields.map((field) => (
-        <label key={field.name} className="flex flex-col gap-1 text-sm">
-          {field.label}
-          {field.type === "select" ? (
-            <select
-              className="h-10 rounded-md border border-navy-300 bg-white px-3 text-sm dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100"
-              required={field.required}
-              value={typeof values[field.name] === "string" ? (values[field.name] as string) : ""}
-              onChange={(e) => setValues((v) => ({ ...v, [field.name]: e.target.value }))}
-            >
-              <option value="" disabled>
-                Select…
-              </option>
-              {field.options?.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
+      {fields.map((field) => {
+        const fieldErrorId = `${errorId}-${field.name}`;
+        return (
+          <label key={field.name} className="flex flex-col gap-1 text-sm">
+            <span>
+              {field.label}
+              {field.required && (
+                <span className="ms-0.5 text-danger" aria-hidden="true">
+                  *
+                </span>
+              )}
+            </span>
+            {field.type === "select" ? (
+              <select
+                className="h-10 rounded-md border border-border bg-surface px-3 text-sm text-text"
+                required={field.required}
+                value={typeof values[field.name] === "string" ? (values[field.name] as string) : ""}
+                onChange={(e) => setValues((v) => ({ ...v, [field.name]: e.target.value }))}
+                aria-invalid={error ? true : undefined}
+              >
+                <option value="" disabled>
+                  Select…
                 </option>
-              ))}
-            </select>
-          ) : field.type === "checkbox" ? (
-            <input
-              type="checkbox"
-              checked={Boolean(values[field.name])}
-              onChange={(e) => setValues((v) => ({ ...v, [field.name]: e.target.checked }))}
-            />
-          ) : field.type === "multiselect" ? (
-            <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-md border border-navy-200 p-2 dark:border-navy-700">
-              {field.options?.map((opt) => {
-                const selected = Array.isArray(values[field.name]) ? (values[field.name] as string[]) : [];
-                const checked = selected.includes(opt.value);
-                return (
-                  <label key={opt.value} className="flex items-center gap-2 text-xs font-normal">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) =>
-                        setValues((v) => {
-                          const current = Array.isArray(v[field.name]) ? (v[field.name] as string[]) : [];
-                          return {
-                            ...v,
-                            [field.name]: e.target.checked
-                              ? [...current, opt.value]
-                              : current.filter((val) => val !== opt.value),
-                          };
-                        })
-                      }
-                    />
+                {field.options?.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
                     {opt.label}
-                  </label>
-                );
-              })}
-            </div>
-          ) : (
-            <Input
-              type={field.type}
-              required={field.required}
-              value={typeof values[field.name] === "string" ? (values[field.name] as string) : ""}
-              onChange={(e) => setValues((v) => ({ ...v, [field.name]: e.target.value }))}
-            />
-          )}
-        </label>
-      ))}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+                  </option>
+                ))}
+              </select>
+            ) : field.type === "checkbox" ? (
+              <input
+                type="checkbox"
+                checked={Boolean(values[field.name])}
+                onChange={(e) => setValues((v) => ({ ...v, [field.name]: e.target.checked }))}
+              />
+            ) : field.type === "multiselect" ? (
+              <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-md border border-border p-2">
+                {field.options?.map((opt) => {
+                  const selected = Array.isArray(values[field.name]) ? (values[field.name] as string[]) : [];
+                  const checked = selected.includes(opt.value);
+                  return (
+                    <label key={opt.value} className="flex items-center gap-2 text-xs font-normal">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) =>
+                          setValues((v) => {
+                            const current = Array.isArray(v[field.name]) ? (v[field.name] as string[]) : [];
+                            return {
+                              ...v,
+                              [field.name]: e.target.checked
+                                ? [...current, opt.value]
+                                : current.filter((val) => val !== opt.value),
+                            };
+                          })
+                        }
+                      />
+                      {opt.label}
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <Input
+                type={field.type}
+                required={field.required}
+                value={typeof values[field.name] === "string" ? (values[field.name] as string) : ""}
+                onChange={(e) => setValues((v) => ({ ...v, [field.name]: e.target.value }))}
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? fieldErrorId : undefined}
+              />
+            )}
+          </label>
+        );
+      })}
+      {error && (
+        <p id={errorId} role="alert" className="text-sm text-danger">
+          {error}
+        </p>
+      )}
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" onClick={onCancel}>
+        <Button type="button" variant="outline" onClick={onCancel} disabled={pending}>
           Cancel
         </Button>
         <Button type="submit" disabled={pending}>
-          {submitLabel}
+          {pending ? "Saving…" : submitLabel}
         </Button>
       </div>
     </form>
@@ -125,15 +156,15 @@ interface ResourceListPageProps<T extends { id: string }> {
   onSearch: (q: string) => void;
   csvUrl?: string;
   createFields: FieldConfig[];
-  onCreate: (values: FormValues) => void;
-  creating: boolean;
-  createError?: string | null;
+  /** Must reject on failure (pass create.mutateAsync, not create.mutate) — the form only closes on success. */
+  onCreate: (values: FormValues) => Promise<unknown>;
   editFields?: FieldConfig[];
-  onUpdate?: (id: string, values: FormValues) => void;
-  updating?: boolean;
+  onUpdate?: (id: string, values: FormValues) => Promise<unknown>;
   onVoid: (id: string) => void;
   voiding: boolean;
   permissions: { create: boolean; edit: boolean; void: boolean };
+  /** Contextual copy for the empty state ("No customers yet. Create your first customer to..."), shown instead of the generic fallback. */
+  emptyState?: { title: string; description?: string };
 }
 
 export function ResourceListPage<T extends { id: string }>({
@@ -149,21 +180,21 @@ export function ResourceListPage<T extends { id: string }>({
   csvUrl,
   createFields,
   onCreate,
-  creating,
-  createError,
   editFields,
   onUpdate,
-  updating,
   onVoid,
   voiding,
   permissions,
+  emptyState,
 }: ResourceListPageProps<T>) {
   const { t } = useLanguage();
   const [showCreate, setShowCreate] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [confirmVoidId, setConfirmVoidId] = React.useState<string | null>(null);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const editingRow = items.find((i) => i.id === editingId);
+  const voidingRow = items.find((i) => i.id === confirmVoidId);
 
   return (
     <Card>
@@ -192,23 +223,13 @@ export function ResourceListPage<T extends { id: string }>({
         />
 
         {showCreate && (
-          <Card className="border-navy-300 dark:border-navy-600">
-            <ResourceForm
-              fields={createFields}
-              onSubmit={(values) => {
-                onCreate(values);
-                setShowCreate(false);
-              }}
-              onCancel={() => setShowCreate(false)}
-              pending={creating}
-              error={createError}
-              submitLabel={t.resource.create}
-            />
+          <Card className="border-border bg-surface-raised">
+            <ResourceForm fields={createFields} onSubmit={onCreate} onCancel={() => setShowCreate(false)} submitLabel={t.resource.create} />
           </Card>
         )}
 
         {editingRow && editFields && onUpdate && (
-          <Card className="border-navy-300 dark:border-navy-600">
+          <Card className="border-border bg-surface-raised">
             <ResourceForm
               fields={editFields}
               initialValues={editFields.reduce<FormValues>((acc, f) => {
@@ -222,12 +243,8 @@ export function ResourceListPage<T extends { id: string }>({
                 }
                 return acc;
               }, {})}
-              onSubmit={(values) => {
-                onUpdate(editingRow.id, values);
-                setEditingId(null);
-              }}
+              onSubmit={(values) => onUpdate(editingRow.id, values)}
               onCancel={() => setEditingId(null)}
-              pending={Boolean(updating)}
               submitLabel={t.resource.save}
             />
           </Card>
@@ -236,7 +253,7 @@ export function ResourceListPage<T extends { id: string }>({
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
+              <tr className="border-b border-border text-start text-text-muted">
                 {columns.map((col) => (
                   <th key={String(col.key)} className="py-2 pe-4 font-medium">
                     {col.header}
@@ -246,22 +263,17 @@ export function ResourceListPage<T extends { id: string }>({
               </tr>
             </thead>
             <tbody>
-              {isLoading && (
-                <tr>
-                  <td colSpan={columns.length + 1} className="py-4 text-center text-navy-400 dark:text-navy-500">
-                    {t.resource.loading}
-                  </td>
-                </tr>
-              )}
+              {isLoading && <TableSkeleton columns={columns.length + 1} />}
               {!isLoading && items.length === 0 && (
                 <tr>
-                  <td colSpan={columns.length + 1} className="py-4 text-center text-navy-400 dark:text-navy-500">
-                    {t.resource.empty}
+                  <td colSpan={columns.length + 1} className="py-8 text-center">
+                    <p className="font-medium text-text">{emptyState?.title ?? t.resource.empty}</p>
+                    {emptyState?.description && <p className="mt-1 text-sm text-text-muted">{emptyState.description}</p>}
                   </td>
                 </tr>
               )}
               {items.map((row) => (
-                <tr key={row.id} className="border-b border-navy-100 dark:border-navy-800">
+                <tr key={row.id} className="border-b border-border/60">
                   {columns.map((col) => (
                     <td key={String(col.key)} className="py-2 pe-4">
                       {col.render ? col.render(row) : String(row[col.key] ?? "")}
@@ -275,7 +287,7 @@ export function ResourceListPage<T extends { id: string }>({
                         </Button>
                       )}
                       {permissions.void && (
-                        <Button variant="ghost" size="sm" disabled={voiding} onClick={() => onVoid(row.id)}>
+                        <Button variant="ghost" size="sm" disabled={voiding} onClick={() => setConfirmVoidId(row.id)}>
                           {t.resource.remove}
                         </Button>
                       )}
@@ -287,9 +299,9 @@ export function ResourceListPage<T extends { id: string }>({
           </table>
         </div>
 
-        <div className="flex items-center justify-between text-sm text-navy-500 dark:text-navy-400">
+        <div className="flex items-center justify-between text-sm text-text-muted">
           <span>{t.resource.pageOf(page, totalPages, total)}</span>
-          <div className="flex gap-2">
+          <div className="flex gap-2 rtl:flex-row-reverse">
             <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
               {t.resource.previous}
             </Button>
@@ -304,6 +316,19 @@ export function ResourceListPage<T extends { id: string }>({
           </div>
         </div>
       </CardContent>
+
+      <ConfirmDialog
+        open={confirmVoidId !== null}
+        title={t.resource.confirmRemove}
+        itemLabel={voidingRow ? String((voidingRow as Record<string, unknown>).name ?? (voidingRow as Record<string, unknown>).code ?? voidingRow.id) : undefined}
+        confirmLabel={t.resource.remove}
+        pending={voiding}
+        onConfirm={() => {
+          if (confirmVoidId) onVoid(confirmVoidId);
+          setConfirmVoidId(null);
+        }}
+        onCancel={() => setConfirmVoidId(null)}
+      />
     </Card>
   );
 }

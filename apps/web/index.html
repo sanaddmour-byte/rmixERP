@@ -4,6 +4,28 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RMC ERP</title>
+    <!-- Runs before any CSS/React loads, reading the same localStorage
+         keys LanguageContext/ThemeContext use — without this, an Arabic
+         or dark-mode user sees a flash of English/light-mode layout on
+         every page load (docs/ui-ux-audit.md §7.3), since those contexts
+         only apply dir/theme in a useEffect, after first paint. -->
+    <script>
+      (function () {
+        try {
+          var locale = localStorage.getItem("rmixerp-locale");
+          if (locale === "ar") {
+            document.documentElement.dir = "rtl";
+            document.documentElement.lang = "ar";
+          }
+          var theme = localStorage.getItem("rmixerp-theme");
+          if (theme === "dark" || (!theme && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+            document.documentElement.classList.add("dark");
+          }
+        } catch (e) {
+          // localStorage unavailable (private browsing, etc.) — falls back to the default light/LTR markup above, same as the React contexts do.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
