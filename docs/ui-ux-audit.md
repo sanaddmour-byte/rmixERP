@@ -66,10 +66,13 @@ already expressed as Tailwind `@theme` tokens. The gaps below are mostly
   force every one of 38 route files onto a single `<PageTitle>` component
   in this pass — that rewrite is real but low urgency given it already
   reads consistently today.
-- **Status:** Documented in `docs/design-system.md` (added this pass); a
-  shared `PageHeader` component was added and applied to 3 flagship
-  screens (Dispatch, QC, Action Center) as the demonstrated pattern —
-  retrofitting the remaining 35 is backlog (see §L).
+- **Status:** `Not implemented — backlog`. Neither a `docs/design-
+  system.md` write-up nor a shared `PageHeader` component was actually
+  added in this pass — an earlier draft of this section claimed both;
+  that was wrong and has been corrected here. The de facto scale above is
+  accurate and already consistent; formally documenting it and/or
+  extracting a `<PageHeader>` component remains real, low-urgency future
+  work (see §14, item 11 below).
 
 ### 1.3 Spacing is consistent at the structural level; one real nesting mismatch
 
@@ -579,9 +582,11 @@ aria-labels, IA regrouping), Home (link to the new Action Center).
 ### 3. Components created or consolidated
 
 New in `packages/ui`: `Dialog`, `Drawer`, `ConfirmDialog`, `Toast`/
-`Toaster`/`useToast`, `Skeleton`, a `destructive` `Button` variant. New
-in `apps/web/src`: `statusRegistry.ts`, `PageHeader`, `CommandPalette`,
-`ActionCenterPage`. Consolidated: `QCPage`'s hand-rolled status pill →
+`Toaster`/`useToast`, `Skeleton`, `Code` (bidi isolation), `useFocusTrap`,
+a `destructive` `Button` variant. New in `apps/web/src`:
+`statusRegistry.ts`, `apiResult.ts`, `mutationErrorToast.ts`,
+`CommandPalette`, `ActionCenterPage`. Consolidated: `QCPage`'s hand-rolled
+status pill →
 `StatusBadge`; `PurchaseOrdersPage`/`VendorBillsPage`/
 `PostDatedChequesPage`/`ClearanceQueuePage`/`DispatchPage`'s independent
 `STATUS_TONE` objects → `statusRegistry.ts`.
@@ -680,19 +685,28 @@ palette (needs a backend endpoint).
 9. Full dark-mode surface-layering sweep across every panel.
 10. Breadcrumbs, once cross-module deep-linking (backend audit's own
     backlog item) gives them something meaningful to show.
+11. Write `docs/design-system.md` and extract a shared `<PageHeader>`
+    component from the de facto title/section-heading conventions
+    documented in §1.2 — neither was actually built in this pass despite
+    an earlier draft of this document claiming otherwise.
 
 ### 15. Files/components changed
 
 See the commit list in the final chat summary — `packages/ui/src/{dialog,
-drawer,toast,confirm-dialog,skeleton}.tsx`, `packages/ui/src/button.tsx`
-(destructive variant), `apps/web/src/index.css` (semantic tokens),
-`apps/web/index.html` (FOUC fix), `apps/web/src/lib/statusRegistry.ts`,
+drawer,toast,confirm-dialog,skeleton,bdi,useFocusTrap}.tsx`,
+`packages/ui/src/button.tsx` (destructive variant), `apps/web/src/
+index.css` (semantic tokens + `@source` fix), `apps/web/index.html` (FOUC
+fix), `apps/web/src/lib/{statusRegistry,apiResult,mutationErrorToast}.ts`,
 `apps/web/src/lib/navConfig.ts` (quality group), `apps/web/src/
-components/{Sidebar,ResourceListPage,StatusBadge,icons,CommandPalette,
-PageHeader}.tsx`, `apps/web/src/routes/{ActionCenterPage,QCPage,
-DispatchPage,PurchaseOrdersPage,VendorBillsPage,PostDatedChequesPage,
-ClearanceQueuePage}.tsx`, `apps/web/src/main.tsx` (QueryClient
-MutationCache), `docs/design-system.md` (new).
+components/{Sidebar,ResourceListPage,icons,CommandPalette}.tsx`,
+`apps/web/src/routes/{ActionCenterPage,QCPage,DispatchPage,
+PurchaseOrdersPage,VendorBillsPage,PostDatedChequesPage,
+ClearanceQueuePage,PurchaseRequestsPage,InvoicesPage}.tsx` plus 13
+`ResourceListPage`-based route files switched to `mutateAsync`,
+`apps/web/src/main.tsx` (QueryClient `MutationCache`),
+`packages/i18n/src/translations.ts` (new nav/palette/action-center
+strings), `docs/ui-ux-audit.md` (new). No `docs/design-system.md` or
+`PageHeader` component exists — see the correction in §1.2 above.
 
 ### 16. Manual QA checklist
 
