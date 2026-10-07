@@ -69,20 +69,29 @@ describe("document-expiry report", () => {
     const original = await request(app).get("/api/company").set("Authorization", `Bearer ${admin}`);
     const originalWarningDays = original.body.documentExpiryWarningDays as number;
 
-    const soon = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(); // 5 days out
-    const truckRes = await request(app)
-      .post("/api/trucks")
-      .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, plateNumber: `FONARROW-${Date.now()}`, insuranceExpiresAt: soon });
+    // try/finally: this test mutates the shared singleton company row, so a
+    // thrown assertion must not leave documentExpiryWarningDays corrupted
+    // for every test file that runs after this one against the same
+    // database (see docs/architecture/production-readiness-audit.md).
+    try {
+      const soon = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(); // 5 days out
+      const truckRes = await request(app)
+        .post("/api/trucks")
+        .set("Authorization", `Bearer ${admin}`)
+        .send({ branchId, plateNumber: `FONARROW-${Date.now()}`, insuranceExpiresAt: soon });
 
-    await request(app).put("/api/company").set("Authorization", `Bearer ${admin}`).send({ documentExpiryWarningDays: 1 });
-    const narrowRes = await request(app).get("/api/reports/document-expiry").set("Authorization", `Bearer ${admin}`);
-    expect(narrowRes.body.items.some((i: { entityId: string }) => i.entityId === truckRes.body.id)).toBe(false);
+      const narrowPut = await request(app).put("/api/company").set("Authorization", `Bearer ${admin}`).send({ documentExpiryWarningDays: 1 });
+      expect(narrowPut.status).toBe(200);
+      expect(narrowPut.body.documentExpiryWarningDays).toBe(1);
+      const narrowRes = await request(app).get("/api/reports/document-expiry").set("Authorization", `Bearer ${admin}`);
+      expect(narrowRes.body.items.some((i: { entityId: string }) => i.entityId === truckRes.body.id)).toBe(false);
 
-    await request(app).put("/api/company").set("Authorization", `Bearer ${admin}`).send({ documentExpiryWarningDays: 10 });
-    const wideRes = await request(app).get("/api/reports/document-expiry").set("Authorization", `Bearer ${admin}`);
-    expect(wideRes.body.items.some((i: { entityId: string }) => i.entityId === truckRes.body.id)).toBe(true);
-
-    await request(app).put("/api/company").set("Authorization", `Bearer ${admin}`).send({ documentExpiryWarningDays: originalWarningDays });
+      const widePut = await request(app).put("/api/company").set("Authorization", `Bearer ${admin}`).send({ documentExpiryWarningDays: 10 });
+      expect(widePut.status).toBe(200);
+      const wideRes = await request(app).get("/api/reports/document-expiry").set("Authorization", `Bearer ${admin}`);
+      expect(wideRes.body.items.some((i: { entityId: string }) => i.entityId === truckRes.body.id)).toBe(true);
+    } finally {
+      await request(app).put("/api/company").set("Authorization", `Bearer ${admin}`).send({ documentExpiryWarningDays: originalWarningDays });
+    }
   });
 });

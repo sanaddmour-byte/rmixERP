@@ -73,7 +73,7 @@ import { paramId, queryString } from "../lib/params";
 import { writeAudit } from "../audit";
 import { allocateDocumentNumber } from "./invoices";
 import { findOrCreateBalance } from "./inventory";
-import { findWellKnownAccount, postJournalEntry } from "../lib/glPosting";
+import { findWellKnownAccount, isPeriodOpen, postJournalEntry } from "../lib/glPosting";
 import { pushForNotification } from "../lib/pushNotifications";
 
 export const procurementRouter = Router();
@@ -266,7 +266,16 @@ function prTransitionRoute(path: string, from: readonly PurchaseRequestRow["stat
     const id = paramId(req);
 
     const result = await withTenant(db, req.auth!.companyId, async (tx) => {
-      const [before] = await tx.select().from(purchaseRequest).where(and(eq(purchaseRequest.id, id), isNull(purchaseRequest.voidedAt)));
+      // Row lock: every purchase-request transition route (submit/
+      // approve/reject/etc.) is built from this one function, so a
+      // double-submitted transition request can't pass the same
+      // from-status check twice and apply the transition's side effects
+      // (audit log, numbering, downstream PO conversion) more than once.
+      const [before] = await tx
+        .select()
+        .from(purchaseRequest)
+        .where(and(eq(purchaseRequest.id, id), isNull(purchaseRequest.voidedAt)))
+        .for("update");
       if (!before) return { kind: "not_found" as const };
       if (!from.includes(before.status)) return { kind: "invalid_status" as const };
       assertPurchaseRequestTransition(before.status, to);
@@ -527,7 +536,13 @@ function poTransitionRoute(
     const id = paramId(req);
 
     const result = await withTenant(db, req.auth!.companyId, async (tx) => {
-      const [before] = await tx.select().from(purchaseOrder).where(and(eq(purchaseOrder.id, id), isNull(purchaseOrder.voidedAt)));
+      // Row lock: same reasoning as prTransitionRoute above — every
+      // purchase-order transition route shares this function.
+      const [before] = await tx
+        .select()
+        .from(purchaseOrder)
+        .where(and(eq(purchaseOrder.id, id), isNull(purchaseOrder.voidedAt)))
+        .for("update");
       if (!before) return { kind: "not_found" as const };
       if (!from.includes(before.status)) return { kind: "invalid_status" as const };
       if (to === "submitted") {
@@ -645,7 +660,16 @@ procurementRouter.post("/goods-receipts", requireAuth, requirePermission(GR_MODU
   const input = parsed.data;
 
   const result = await withTenant(db, req.auth!.companyId, async (tx) => {
-    const [poRow] = await tx.select().from(purchaseOrder).where(and(eq(purchaseOrder.id, input.purchaseOrderId), isNull(purchaseOrder.voidedAt)));
+    // Row lock: goods receipts against one PO are legitimately repeatable
+    // (partial receiving), so the risk isn't a double-transition but two
+    // concurrent receipts both computing "remaining to receive" from the
+    // same stale snapshot and jointly over-receiving past PO quantities.
+    // Locking the PO row serializes receipt creation against it.
+    const [poRow] = await tx
+      .select()
+      .from(purchaseOrder)
+      .where(and(eq(purchaseOrder.id, input.purchaseOrderId), isNull(purchaseOrder.voidedAt)))
+      .for("update");
     if (!poRow) return { kind: "not_found" as const };
     if (poRow.status !== "approved" && poRow.status !== "received") return { kind: "invalid_status" as const };
 
@@ -833,7 +857,16 @@ procurementRouter.post("/vendor-bills", requireAuth, requirePermission(BILL_MODU
   const input = parsed.data;
 
   const result = await withTenant(db, req.auth!.companyId, async (tx) => {
-    const [poRow] = await tx.select().from(purchaseOrder).where(and(eq(purchaseOrder.id, input.purchaseOrderId), isNull(purchaseOrder.voidedAt)));
+    // Row lock: same reasoning as goods-receipt creation above — vendor
+    // bills against one PO are legitimately repeatable (partial billing),
+    // so this serializes bill creation to prevent two concurrent bills
+    // both reading the same "remaining unbilled" snapshot and jointly
+    // over-billing past PO line quantities.
+    const [poRow] = await tx
+      .select()
+      .from(purchaseOrder)
+      .where(and(eq(purchaseOrder.id, input.purchaseOrderId), isNull(purchaseOrder.voidedAt)))
+      .for("update");
     if (!poRow) return { kind: "not_found" as const };
     if (poRow.status !== "received" && poRow.status !== "billed") return { kind: "invalid_status" as const };
 
@@ -973,7 +1006,14 @@ procurementRouter.post("/vendor-bills/:id/approve", requireAuth, requirePermissi
   const id = paramId(req);
 
   const result = await withTenant(db, req.auth!.companyId, async (tx) => {
-    const [before] = await tx.select().from(vendorBill).where(and(eq(vendorBill.id, id), isNull(vendorBill.voidedAt)));
+    // Row lock: approval posts a GL journal entry (Dr Inventory/Input Tax,
+    // Cr Accounts Payable) — a double-submitted approve must not pass the
+    // draft-status check twice and post the same bill to the ledger twice.
+    const [before] = await tx
+      .select()
+      .from(vendorBill)
+      .where(and(eq(vendorBill.id, id), isNull(vendorBill.voidedAt)))
+      .for("update");
     if (!before) return { kind: "not_found" as const };
     if (before.status !== "draft") return { kind: "invalid_status" as const };
     assertVendorBillTransition(before.status, "approved");
@@ -991,7 +1031,8 @@ procurementRouter.post("/vendor-bills/:id/approve", requireAuth, requirePermissi
       ...(taxFils > ZERO_FILS ? [{ accountId: taxInputAccountId, debitFils: taxFils, creditFils: ZERO_FILS }] : []),
       { accountId: apAccountId, debitFils: ZERO_FILS, creditFils: fils(before.totalFils) },
     ];
-    await postJournalEntry(tx, req.auth!.companyId, before.branchId, new Date(), `Vendor bill ${before.billNumber} approved`, "vendor_bill", before.id, journalLines);
+    const posted = await postJournalEntry(tx, req.auth!.companyId, before.branchId, new Date(), `Vendor bill ${before.billNumber} approved`, "vendor_bill", before.id, journalLines);
+    if (!posted.ok) return { kind: "period_closed" as const };
 
     const [row] = await tx.update(vendorBill).set({ status: "approved", updatedAt: new Date() }).where(eq(vendorBill.id, id)).returning();
     if (!row) throw new Error("vendor bill transition returned no row");
@@ -1013,6 +1054,10 @@ procurementRouter.post("/vendor-bills/:id/approve", requireAuth, requirePermissi
   }
   if (result.kind === "invalid_status") {
     res.status(400).json(validationError({ status: "vendor bill must be draft to approve" }));
+    return;
+  }
+  if (result.kind === "period_closed") {
+    res.status(400).json(validationError({ entryDate: "accounting period for this posting date is closed" }));
     return;
   }
   res.status(200).json(result.body);
@@ -1076,6 +1121,15 @@ procurementRouter.post("/payments", requireAuth, requirePermission(PAYMENT_MODUL
     if (!vendorRow) return { kind: "vendor_not_found" as const };
     const [branchRow] = await tx.select().from(branch).where(eq(branch.id, input.branchId));
     if (!branchRow) return { kind: "branch_not_found" as const };
+
+    // Checked upfront, before any mutating write below: postJournalEntry's
+    // own period-closed check happens only after payment/allocation/bill-
+    // status writes already ran in this same transaction, and Drizzle only
+    // rolls back on a thrown error — a return value there would let those
+    // writes commit while silently skipping the GL posting.
+    if (!(await isPeriodOpen(tx, req.auth!.companyId, new Date(input.paidAt)))) {
+      return { kind: "period_closed" as const };
+    }
 
     const openBills = await tx
       .select()
@@ -1152,7 +1206,7 @@ procurementRouter.post("/payments", requireAuth, requirePermission(PAYMENT_MODUL
 
     const apAccountId = await findWellKnownAccount(tx, req.auth!.companyId, WELL_KNOWN_ACCOUNT_CODES.accountsPayable);
     const cashAccountId = await findWellKnownAccount(tx, req.auth!.companyId, WELL_KNOWN_ACCOUNT_CODES.cash);
-    await postJournalEntry(
+    const posted = await postJournalEntry(
       tx,
       req.auth!.companyId,
       input.branchId,
@@ -1165,6 +1219,7 @@ procurementRouter.post("/payments", requireAuth, requirePermission(PAYMENT_MODUL
         { accountId: cashAccountId, debitFils: ZERO_FILS, creditFils: amountFils },
       ],
     );
+    if (!posted.ok) return { kind: "period_closed" as const };
 
     await writeAudit(tx, {
       companyId: req.auth!.companyId,
@@ -1188,6 +1243,10 @@ procurementRouter.post("/payments", requireAuth, requirePermission(PAYMENT_MODUL
   }
   if (result.kind === "invalid_allocation") {
     res.status(400).json(validationError({ allocations: result.reason }));
+    return;
+  }
+  if (result.kind === "period_closed") {
+    res.status(400).json(validationError({ paidAt: "accounting period for this posting date is closed" }));
     return;
   }
   res.status(201).json(result.body);

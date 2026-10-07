@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { isNull } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import { company, driver, truck, withTenant } from "@rmixerp/db";
 import { evaluateDocumentExpiry, type DocumentExpiryLabel } from "@rmixerp/core";
 import { db } from "../db";
@@ -31,7 +31,9 @@ fleetOpsRouter.get("/reports/document-expiry", requireAuth, requirePermission("t
   const asOf = queryString(req, "asOf") ? new Date(queryString(req, "asOf")!) : new Date();
 
   const result = await withTenant(db, req.auth!.companyId, async (tx) => {
-    const [companyRow] = await tx.select().from(company);
+    // Explicit filter, not just RLS, for this singleton-per-tenant lookup —
+    // same defense-in-depth as company.ts's own GET/PUT handlers.
+    const [companyRow] = await tx.select().from(company).where(eq(company.id, req.auth!.companyId));
     const warningDays = companyRow?.documentExpiryWarningDays ?? 30;
 
     const trucks = await tx.select().from(truck).where(isNull(truck.voidedAt));

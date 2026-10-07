@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { and, desc, eq, ilike, isNull, sql } from "drizzle-orm";
-import { customer, withTenant, type Tx } from "@rmixerp/db";
+import { branch, customer, withTenant, type Tx } from "@rmixerp/db";
 import { fils, filsToJodString, jodStringToFils } from "@rmixerp/core";
 import { CreateCustomerBody, UpdateCustomerBody, VoidCustomerBody, type Customer } from "@rmixerp/contract";
 import { db } from "../db";
@@ -45,6 +45,21 @@ async function findActive(tx: Tx, id: string): Promise<CustomerRow | undefined> 
     .from(customer)
     .where(and(eq(customer.id, id), isNull(customer.voidedAt)));
   return row;
+}
+
+/**
+ * Re-validates that a client-supplied branchId actually belongs to this
+ * tenant before it's stored. The FK constraint on customer.branch_id only
+ * proves a branch row with that id exists SOMEWHERE — Postgres FK
+ * validation does not go through row-level security — so without this
+ * check, inside this already-tenant-scoped transaction, a request could
+ * reference another company's real branch id and the write would still
+ * succeed (see docs/architecture/production-readiness-audit.md's
+ * "unvalidated cross-tenant foreign references" finding).
+ */
+async function branchBelongsToTenant(tx: Tx, branchId: string): Promise<boolean> {
+  const [row] = await tx.select({ id: branch.id }).from(branch).where(eq(branch.id, branchId));
+  return Boolean(row);
 }
 
 customersRouter.get("/customers", requireAuth, requirePermission(MODULE, "view"), async (req, res) => {
@@ -94,6 +109,9 @@ customersRouter.post("/customers", requireAuth, requirePermission(MODULE, "creat
   const input = parsed.data;
 
   const created = await withTenant(db, req.auth!.companyId, async (tx) => {
+    if (input.branchId && !(await branchBelongsToTenant(tx, input.branchId))) {
+      return { kind: "bad_branch" as const };
+    }
     const [row] = await tx
       .insert(customer)
       .values({
@@ -122,10 +140,14 @@ customersRouter.post("/customers", requireAuth, requirePermission(MODULE, "creat
       action: "create",
       after: row,
     });
-    return row;
+    return { kind: "ok" as const, row };
   });
 
-  res.status(201).json(toApi(created));
+  if (created.kind === "bad_branch") {
+    res.status(400).json(validationError({ branchId: "unknown branch" }));
+    return;
+  }
+  res.status(201).json(toApi(created.row));
 });
 
 customersRouter.put("/customers/:id", requireAuth, requirePermission(MODULE, "edit"), async (req, res) => {
@@ -139,7 +161,10 @@ customersRouter.put("/customers/:id", requireAuth, requirePermission(MODULE, "ed
 
   const updated = await withTenant(db, req.auth!.companyId, async (tx) => {
     const before = await findActive(tx, id);
-    if (!before) return null;
+    if (!before) return { kind: "not_found" as const };
+    if (input.branchId && !(await branchBelongsToTenant(tx, input.branchId))) {
+      return { kind: "bad_branch" as const };
+    }
 
     const [row] = await tx
       .update(customer)
@@ -170,14 +195,18 @@ customersRouter.put("/customers/:id", requireAuth, requirePermission(MODULE, "ed
       before,
       after: row,
     });
-    return row;
+    return { kind: "ok" as const, row };
   });
 
-  if (!updated) {
+  if (updated.kind === "not_found") {
     res.status(404).json(notFound("Customer"));
     return;
   }
-  res.status(200).json(toApi(updated));
+  if (updated.kind === "bad_branch") {
+    res.status(400).json(validationError({ branchId: "unknown branch" }));
+    return;
+  }
+  res.status(200).json(toApi(updated.row));
 });
 
 customersRouter.delete("/customers/:id", requireAuth, requirePermission(MODULE, "void"), async (req, res) => {

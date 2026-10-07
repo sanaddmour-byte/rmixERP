@@ -264,14 +264,25 @@ deliveryOrdersRouter.post(
     const id = paramId(req);
 
     const result = await withTenant(db, req.auth!.companyId, async (tx) => {
-      const before = await findActiveDeliveryOrder(tx, id);
+      // Row lock: a double-submitted dispatch request (retried network
+      // call, double-tap) must not both pass the planned-status check and
+      // both run truck/driver assignment + credit/document-expiry checks.
+      const [before] = await tx
+        .select()
+        .from(deliveryOrder)
+        .where(and(eq(deliveryOrder.id, id), isNull(deliveryOrder.voidedAt)))
+        .for("update");
       if (!before) return { kind: "not_found" as const };
       if (before.status !== "planned") return { kind: "invalid_status" as const };
       assertDeliveryOrderTransition(before.status, "dispatched");
 
       const [order] = await tx.select().from(salesOrder).where(eq(salesOrder.id, before.salesOrderId));
       if (!order) throw new Error("delivery order references a missing sales order");
-      const [cust] = await tx.select().from(customer).where(eq(customer.id, order.customerId));
+      // Same per-customer serialization as sales-order confirm (see the
+      // comment there): two delivery orders for the same customer
+      // dispatched concurrently must not both pass credit against the
+      // same stale exposure figure.
+      const [cust] = await tx.select().from(customer).where(eq(customer.id, order.customerId)).for("update");
       if (!cust) throw new Error("sales order references a missing customer");
 
       const currentOutstandingFils = await computeOutstandingInvoiceExposure(tx, order.customerId);
@@ -285,7 +296,9 @@ deliveryOrdersRouter.post(
 
       const [truckRow] = await tx.select().from(truck).where(eq(truck.id, input.truckId));
       const [driverRow] = await tx.select().from(driver).where(eq(driver.id, input.driverId));
-      const [companyRow] = await tx.select().from(company);
+      // Explicit filter, not just RLS, for this singleton-per-tenant lookup —
+      // same defense-in-depth as company.ts's own GET/PUT handlers.
+      const [companyRow] = await tx.select().from(company).where(eq(company.id, req.auth!.companyId));
       const documentCheck = evaluateDocumentExpiry({
         asOf: new Date(),
         warningDays: companyRow?.documentExpiryWarningDays ?? 30,
@@ -418,7 +431,17 @@ deliveryOrdersRouter.post(
     const id = paramId(req);
 
     const result = await withTenant(db, req.auth!.companyId, async (tx) => {
-      const before = await findActiveDeliveryOrder(tx, id);
+      // Row lock: the mobile offline sync queue (apps/mobile/src/lib/
+      // syncQueue.ts) can replay this exact request if a prior attempt's
+      // response was lost after the server had already committed it —
+      // without this lock, a replay racing (or merely following) the
+      // original would create a second proof_of_delivery row instead of
+      // correctly landing on invalid_status.
+      const [before] = await tx
+        .select()
+        .from(deliveryOrder)
+        .where(and(eq(deliveryOrder.id, id), isNull(deliveryOrder.voidedAt)))
+        .for("update");
       if (!before) return { kind: "not_found" as const };
       if (before.status !== "dispatched") return { kind: "invalid_status" as const };
       assertDeliveryOrderTransition(before.status, "delivered");

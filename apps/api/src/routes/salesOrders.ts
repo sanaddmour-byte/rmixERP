@@ -6,6 +6,8 @@ import {
   salesOrderLineCharge,
   chargeType,
   customer,
+  branch,
+  project,
   withTenant,
   type Tx,
 } from "@rmixerp/db";
@@ -201,6 +203,21 @@ salesOrdersRouter.post("/sales-orders", requireAuth, requirePermission(MODULE, "
   const input = parsed.data;
 
   const created = await withTenant(db, req.auth!.companyId, async (tx) => {
+    // Re-validates every client-supplied foreign reference belongs to
+    // this tenant before it's stored: the FK constraints on these
+    // columns only prove a row with that id exists SOMEWHERE, since
+    // Postgres FK validation does not go through row-level security
+    // (see docs/architecture/production-readiness-audit.md's
+    // "unvalidated cross-tenant foreign references" finding).
+    const [branchRow] = await tx.select({ id: branch.id }).from(branch).where(eq(branch.id, input.branchId));
+    if (!branchRow) return { kind: "bad_branch" as const };
+    const [customerRow] = await tx.select({ id: customer.id }).from(customer).where(eq(customer.id, input.customerId));
+    if (!customerRow) return { kind: "bad_customer" as const };
+    if (input.projectId) {
+      const [projectRow] = await tx.select({ id: project.id }).from(project).where(eq(project.id, input.projectId));
+      if (!projectRow) return { kind: "bad_project" as const };
+    }
+
     const [row] = await tx
       .insert(salesOrder)
       .values({
@@ -221,10 +238,22 @@ salesOrdersRouter.post("/sales-orders", requireAuth, requirePermission(MODULE, "
       action: "create",
       after: row,
     });
-    return row;
+    return { kind: "ok" as const, row };
   });
 
-  res.status(201).json({ ...toApi(created), lines: [] });
+  if (created.kind === "bad_branch") {
+    res.status(400).json(validationError({ branchId: "unknown branch" }));
+    return;
+  }
+  if (created.kind === "bad_customer") {
+    res.status(400).json(validationError({ customerId: "unknown customer" }));
+    return;
+  }
+  if (created.kind === "bad_project") {
+    res.status(400).json(validationError({ projectId: "unknown project" }));
+    return;
+  }
+  res.status(201).json({ ...toApi(created.row), lines: [] });
 });
 
 salesOrdersRouter.get("/sales-orders/:id", requireAuth, requirePermission(MODULE, "view"), async (req, res) => {
@@ -590,7 +619,17 @@ salesOrdersRouter.post("/sales-orders/:id/confirm", requireAuth, requirePermissi
   const id = paramId(req);
 
   const result = await withTenant(db, req.auth!.companyId, async (tx) => {
-    const before = await findActiveSalesOrder(tx, id);
+    // Row lock on the order itself: two concurrent confirm requests for
+    // the same order (a double-submitted click, a retried request) must
+    // not both pass the draft-status check and both run the confirm
+    // side-effects (credit check, audit log, numbering). The loser blocks
+    // here until the winner commits, then re-reads status as "confirmed"
+    // and correctly falls into invalid_status instead of re-confirming.
+    const [before] = await tx
+      .select()
+      .from(salesOrder)
+      .where(and(eq(salesOrder.id, id), isNull(salesOrder.voidedAt)))
+      .for("update");
     if (!before) return { kind: "not_found" as const };
     if (before.status !== "draft") return { kind: "invalid_status" as const };
     assertSalesOrderTransition(before.status, "confirmed");
@@ -601,7 +640,13 @@ salesOrdersRouter.post("/sales-orders/:id/confirm", requireAuth, requirePermissi
       .where(and(eq(salesOrderLine.salesOrderId, id), isNull(salesOrderLine.voidedAt)));
     if ((lineCount[0]?.count ?? 0) === 0) return { kind: "no_lines" as const };
 
-    const [cust] = await tx.select().from(customer).where(eq(customer.id, before.customerId));
+    // Locks the customer row for the rest of this transaction: two sales
+    // orders for the same customer confirmed concurrently must not both
+    // evaluate the credit check against the same stale exposure figure
+    // and both pass. The second confirm blocks here until the first
+    // commits, then re-reads exposure including the first's now-committed
+    // order — serializing credit decisions per customer, not globally.
+    const [cust] = await tx.select().from(customer).where(eq(customer.id, before.customerId)).for("update");
     if (!cust) throw new Error("sales order references a missing customer");
 
     const currentOutstandingFils = await computeOutstandingInvoiceExposure(tx, before.customerId);

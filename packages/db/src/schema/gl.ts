@@ -108,3 +108,37 @@ export const journalLine = pgTable(
 
 export type JournalLine = typeof journalLine.$inferSelect;
 export type NewJournalLine = typeof journalLine.$inferInsert;
+
+export const accountingPeriodStatus = pgEnum("accounting_period_status", ["open", "closed"]);
+
+/**
+ * One row per company per closed calendar month — open periods have no
+ * row at all (an absent row means "open"), so closing is the explicit,
+ * auditable act and nothing has to be pre-created for every future month.
+ * `apps/api/src/lib/glPosting.ts`'s `postJournalEntry` checks this before
+ * every posting, keyed by the entry's own `entryDate`, not "today" — a
+ * backdated posting into an already-closed month is rejected the same as
+ * a forward one into a not-yet-closed future month is allowed.
+ */
+export const accountingPeriod = pgTable(
+  "accounting_period",
+  {
+    id: idColumn(),
+    companyId: uuid("company_id")
+      .notNull()
+      .references(() => company.id),
+    /** "YYYY-MM", matching invoice_number_counter's yearMonth convention. */
+    yearMonth: varchar("year_month", { length: 7 }).notNull(),
+    status: accountingPeriodStatus("status").notNull().default("open"),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    closedBy: uuid("closed_by"),
+    reopenedAt: timestamp("reopened_at", { withTimezone: true }),
+    reopenedBy: uuid("reopened_by"),
+    reopenReason: varchar("reopen_reason", { length: 500 }),
+    ...auditColumns(),
+  },
+  (t) => [tenantIsolationPolicy(), unique("accounting_period_company_year_month_unique").on(t.companyId, t.yearMonth)],
+).enableRLS();
+
+export type AccountingPeriod = typeof accountingPeriod.$inferSelect;
+export type NewAccountingPeriod = typeof accountingPeriod.$inferInsert;
