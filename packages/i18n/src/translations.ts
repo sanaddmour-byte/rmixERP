@@ -109,6 +109,7 @@ export interface Translations {
   };
   login: {
     title: string;
+    tagline: string;
     email: string;
     password: string;
     submit: string;
@@ -251,6 +252,7 @@ export const translations: Record<Locale, Translations> = {
     },
     login: {
       title: "Sign in",
+      tagline: "Operations for ready-mix concrete, end to end.",
       email: "Email",
       password: "Password",
       submit: "Sign in",
@@ -391,6 +393,7 @@ export const translations: Record<Locale, Translations> = {
     },
     login: {
       title: "تسجيل الدخول",
+      tagline: "تشغيل متكامل لمصانع الخرسانة الجاهزة، من البداية إلى النهاية.",
       email: "البريد الإلكتروني",
       password: "كلمة المرور",
       submit: "تسجيل الدخول",

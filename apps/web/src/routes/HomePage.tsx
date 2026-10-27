@@ -4,6 +4,7 @@ import { useLanguage } from "../i18n/LanguageContext";
 import { useCurrentUser } from "../lib/useCurrentUser";
 import { useVisibleNavGroups } from "../lib/useVisibleNavGroups";
 import { Icon, type IconName } from "../components/icons";
+import homeBanner from "../assets/home-banner.png";
 
 /** Odoo-style app launcher: applications grouped by department, one tile per module. */
 export function HomePage() {
@@ -18,18 +19,22 @@ export function HomePage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-navy-900 dark:text-navy-100">{name ? t.home.welcome(name) : t.appName}</h1>
-          <p className="text-sm text-navy-500 dark:text-navy-400">{t.home.subtitle}</p>
+      <div className="relative overflow-hidden rounded-xl">
+        <img src={homeBanner} alt="" role="presentation" className="h-36 w-full object-cover md:h-44" />
+        <div className="absolute inset-0 bg-gradient-to-r from-navy-950/90 via-navy-950/55 to-navy-950/10 rtl:bg-gradient-to-l" />
+        <div className="absolute inset-0 flex flex-wrap items-center justify-between gap-4 p-6">
+          <div>
+            <h1 className="text-2xl font-semibold text-white">{name ? t.home.welcome(name) : t.appName}</h1>
+            <p className="text-sm text-navy-100">{t.home.subtitle}</p>
+          </div>
+          <Link
+            href="/health"
+            className="flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white shadow-sm backdrop-blur-sm hover:border-white/40"
+          >
+            <span className={`h-2 w-2 rounded-full ${healthColor}`} />
+            {healthLabel}
+          </Link>
         </div>
-        <Link
-          href="/health"
-          className="flex items-center gap-2 rounded-full border border-navy-200 bg-white px-3 py-1.5 text-xs font-medium text-navy-600 dark:text-navy-300 shadow-sm hover:border-navy-300 dark:border-navy-700 dark:bg-navy-900 dark:hover:border-navy-600"
-        >
-          <span className={`h-2 w-2 rounded-full ${healthColor}`} />
-          {healthLabel}
-        </Link>
       </div>
 
       {groups.length === 0 && <p className="text-sm text-navy-400">No applications available for your role yet.</p>}
