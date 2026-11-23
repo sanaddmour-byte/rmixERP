@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
-import { company, customer, deliveryOrder, batchRecord, driver, proofOfDelivery, salesOrder, salesOrderLine, truck, withTenant, type Tx } from "@rmixerp/db";
+import { company, customer, deliveryOrder, batchRecord, driver, product, project, proofOfDelivery, salesOrder, salesOrderLine, truck, withTenant, type Tx } from "@rmixerp/db";
 import { assertDeliveryOrderTransition, evaluateCreditCheck, evaluateDocumentExpiry, fils, filsToJodString, ZERO_FILS } from "@rmixerp/core";
 import {
   CreateDeliveryOrderBody,
@@ -28,7 +28,13 @@ type DeliveryOrderRow = typeof deliveryOrder.$inferSelect;
 type BatchRecordRow = typeof batchRecord.$inferSelect;
 type ProofOfDeliveryRow = typeof proofOfDelivery.$inferSelect;
 
-function toApi(row: DeliveryOrderRow, batch: BatchRecordRow | null): DeliveryOrder {
+interface JoinedNames {
+  customerName: string | null;
+  projectName: string | null;
+  productName: string | null;
+}
+
+function toApi(row: DeliveryOrderRow, batch: BatchRecordRow | null, joined?: JoinedNames): DeliveryOrder {
   return {
     id: row.id,
     companyId: row.companyId,
@@ -44,6 +50,9 @@ function toApi(row: DeliveryOrderRow, batch: BatchRecordRow | null): DeliveryOrd
     scheduledAt: row.scheduledAt.toISOString(),
     dispatchedAt: row.dispatchedAt?.toISOString() ?? null,
     deliveredAt: row.deliveredAt?.toISOString() ?? null,
+    customerName: joined?.customerName ?? null,
+    projectName: joined?.projectName ?? null,
+    productName: joined?.productName ?? null,
     qcFlagged: batch?.qcFlagged ?? false,
     qcFlagReason: batch?.qcFlagReason ?? null,
     creditCheckPolicy: row.creditCheckPolicy,
@@ -89,12 +98,33 @@ async function loadBatch(tx: Tx, batchRecordId: string | null): Promise<BatchRec
   return row ?? null;
 }
 
+/** Customer/project/mix names for a set of delivery orders, batched in one query (list + detail share this). */
+async function loadJoinedNames(tx: Tx, deliveryIds: string[]): Promise<Map<string, JoinedNames>> {
+  if (deliveryIds.length === 0) return new Map();
+  const rows = await tx
+    .select({
+      deliveryOrderId: deliveryOrder.id,
+      customerName: customer.name,
+      projectName: project.name,
+      productName: product.name,
+    })
+    .from(deliveryOrder)
+    .innerJoin(salesOrder, eq(deliveryOrder.salesOrderId, salesOrder.id))
+    .innerJoin(customer, eq(salesOrder.customerId, customer.id))
+    .leftJoin(project, eq(salesOrder.projectId, project.id))
+    .leftJoin(salesOrderLine, eq(deliveryOrder.salesOrderLineId, salesOrderLine.id))
+    .leftJoin(product, eq(salesOrderLine.productId, product.id))
+    .where(inArray(deliveryOrder.id, deliveryIds));
+  return new Map(rows.map((r) => [r.deliveryOrderId, { customerName: r.customerName, projectName: r.projectName, productName: r.productName }]));
+}
+
 async function loadDeliveryOrderDetail(tx: Tx, id: string): Promise<DeliveryOrderDetail | null> {
   const row = await findActiveDeliveryOrder(tx, id);
   if (!row) return null;
   const batch = await loadBatch(tx, row.batchRecordId);
+  const joined = (await loadJoinedNames(tx, [id])).get(id);
   const [pod] = await tx.select().from(proofOfDelivery).where(eq(proofOfDelivery.deliveryOrderId, id));
-  return { ...toApi(row, batch), proofOfDelivery: pod ? podToApi(pod) : null };
+  return { ...toApi(row, batch, joined), proofOfDelivery: pod ? podToApi(pod) : null };
 }
 
 deliveryOrdersRouter.get("/delivery-orders", requireAuth, requirePermission(MODULE, "view"), async (req, res) => {
@@ -102,6 +132,7 @@ deliveryOrdersRouter.get("/delivery-orders", requireAuth, requirePermission(MODU
   const status = queryString(req, "status");
   const branchId = queryString(req, "branchId");
   const driverId = queryString(req, "driverId");
+  const truckId = queryString(req, "truckId");
   const salesOrderId = queryString(req, "salesOrderId");
   const scheduledFrom = queryString(req, "scheduledFrom");
   const scheduledTo = queryString(req, "scheduledTo");
@@ -117,6 +148,7 @@ deliveryOrdersRouter.get("/delivery-orders", requireAuth, requirePermission(MODU
       status ? eq(deliveryOrder.status, status as DeliveryOrderRow["status"]) : undefined,
       branchId ? eq(deliveryOrder.branchId, branchId) : undefined,
       driverId ? eq(deliveryOrder.driverId, driverId) : undefined,
+      truckId ? eq(deliveryOrder.truckId, truckId) : undefined,
       salesOrderLineIds ? inArray(deliveryOrder.salesOrderLineId, salesOrderLineIds) : undefined,
       scheduledFrom ? gte(deliveryOrder.scheduledAt, new Date(scheduledFrom)) : undefined,
       scheduledTo ? lte(deliveryOrder.scheduledAt, new Date(scheduledTo)) : undefined,
@@ -128,8 +160,11 @@ deliveryOrdersRouter.get("/delivery-orders", requireAuth, requirePermission(MODU
     const batchIds = rows.map((r) => r.batchRecordId).filter((id): id is string => id !== null);
     const batches = batchIds.length > 0 ? await tx.select().from(batchRecord).where(inArray(batchRecord.id, batchIds)) : [];
     const batchById = new Map(batches.map((b) => [b.id, b]));
+    const joinedByDeliveryId = await loadJoinedNames(tx, rows.map((r) => r.id));
     return {
-      items: rows.map((r) => toApi(r, r.batchRecordId ? (batchById.get(r.batchRecordId) ?? null) : null)),
+      items: rows.map((r) =>
+        toApi(r, r.batchRecordId ? (batchById.get(r.batchRecordId) ?? null) : null, joinedByDeliveryId.get(r.id)),
+      ),
       total: countRows[0]?.count ?? 0,
     };
   });
@@ -489,10 +524,18 @@ deliveryOrdersRouter.get("/dispatch/schedule", requireAuth, requirePermission(MO
 
   const items: DispatchScheduleItem[] = await withTenant(db, req.auth!.companyId, async (tx) => {
     const rows = await tx
-      .select({ delivery: deliveryOrder, customerName: customer.name })
+      .select({
+        delivery: deliveryOrder,
+        customerName: customer.name,
+        projectName: project.name,
+        productName: product.name,
+      })
       .from(deliveryOrder)
       .innerJoin(salesOrder, eq(deliveryOrder.salesOrderId, salesOrder.id))
       .innerJoin(customer, eq(salesOrder.customerId, customer.id))
+      .leftJoin(project, eq(salesOrder.projectId, project.id))
+      .leftJoin(salesOrderLine, eq(deliveryOrder.salesOrderLineId, salesOrderLine.id))
+      .leftJoin(product, eq(salesOrderLine.productId, product.id))
       .where(
         and(
           isNull(deliveryOrder.voidedAt),
@@ -510,6 +553,7 @@ deliveryOrdersRouter.get("/dispatch/schedule", requireAuth, requirePermission(MO
       return {
         id: r.delivery.id,
         status: r.delivery.status,
+        salesOrderLineId: r.delivery.salesOrderLineId,
         quantityM3: r.delivery.quantityM3,
         scheduledAt: r.delivery.scheduledAt.toISOString(),
         dispatchedAt: r.delivery.dispatchedAt?.toISOString() ?? null,
@@ -517,6 +561,8 @@ deliveryOrdersRouter.get("/dispatch/schedule", requireAuth, requirePermission(MO
         truckId: r.delivery.truckId,
         driverId: r.delivery.driverId,
         customerName: r.customerName,
+        projectName: r.projectName,
+        productName: r.productName,
         qcFlagged: batch?.qcFlagged ?? false,
       };
     });

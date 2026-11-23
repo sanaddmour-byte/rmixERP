@@ -1507,6 +1507,9 @@ paths:
         - name: customerId
           in: query
           schema: { type: string, format: uuid }
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
       responses:
         "200":
           description: OK
@@ -2583,6 +2586,10 @@ paths:
         - name: driverId
           in: query
           description: Filter to deliveries assigned to one driver — the mobile driver app's "my deliveries" list.
+          schema: { type: string, format: uuid }
+        - name: truckId
+          in: query
+          description: Filter to deliveries assigned to one truck — the dispatch queue's truck filter.
           schema: { type: string, format: uuid }
         - name: salesOrderId
           in: query
@@ -4948,7 +4955,8 @@ components:
     SalesOrderLine:
       type: object
       required:
-        [id, companyId, salesOrderId, productId, quantityM3, priceListId, priceResolutionTier,
+        [id, companyId, salesOrderId, productId, quantityM3, deliveredQuantityM3, remainingQuantityM3,
+         priceListId, priceResolutionTier,
          concreteUnitPriceJod, deliveryUnitPriceJod, taxRateBasisPoints, netJod, taxJod, totalJod,
          charges, createdAt, updatedAt, voidedAt]
       properties:
@@ -4957,6 +4965,12 @@ components:
         salesOrderId: { type: string, format: uuid }
         productId: { type: string, format: uuid }
         quantityM3: { type: string }
+        deliveredQuantityM3:
+          type: string
+          description: "Sum of quantityM3 across every non-voided delivery order referencing this line, any status."
+        remainingQuantityM3:
+          type: string
+          description: "quantityM3 - deliveredQuantityM3. Can go negative if over-delivered; the UI should treat <= 0 as ineligible for a new delivery."
         priceListId: { type: string, format: uuid }
         priceResolutionTier: { type: string, enum: [project, customer, branch, company] }
         concreteUnitPriceJod: { type: string }
@@ -5475,7 +5489,8 @@ components:
       type: object
       required:
         [id, companyId, branchId, salesOrderId, salesOrderLineId, productionOrderId, batchRecordId, truckId,
-         driverId, quantityM3, status, scheduledAt, dispatchedAt, deliveredAt, qcFlagged, qcFlagReason,
+         driverId, quantityM3, status, scheduledAt, dispatchedAt, deliveredAt, customerName, projectName, productName,
+         qcFlagged, qcFlagReason,
          creditCheckPolicy, creditCheckOutstandingJod, creditCheckExceedsByJod, creditOverride, creditOverrideReason,
          creditOverrideBy, documentExpiryOverride, documentExpiryOverrideReason, documentExpiryOverrideBy, notes,
          createdAt, updatedAt, voidedAt]
@@ -5498,6 +5513,15 @@ components:
         scheduledAt: { type: string, format: date-time }
         dispatchedAt: { type: string, format: date-time, nullable: true }
         deliveredAt: { type: string, format: date-time, nullable: true }
+        customerName:
+          type: string
+          nullable: true
+          description: "Joined via salesOrder->customer. Null only when the join couldn't be resolved (not expected in practice; every delivery order has a sales order)."
+        projectName: { type: string, nullable: true, description: "Joined via salesOrder->project; null when the order has no project." }
+        productName:
+          type: string
+          nullable: true
+          description: "Joined via salesOrderLine->product; null when salesOrderLineId is null (legacy rows)."
         qcFlagged:
           type: boolean
           description: Derived from batchRecordId's batch — true when that batch failed its design-age cube test.
@@ -5588,10 +5612,12 @@ components:
     DispatchScheduleItem:
       type: object
       required:
-        [id, status, quantityM3, scheduledAt, dispatchedAt, deliveredAt, truckId, driverId, customerName, qcFlagged]
+        [id, status, salesOrderLineId, quantityM3, scheduledAt, dispatchedAt, deliveredAt, truckId, driverId,
+         customerName, projectName, productName, qcFlagged]
       properties:
         id: { type: string, format: uuid }
         status: { type: string, enum: [planned, dispatched, delivered, invoiced] }
+        salesOrderLineId: { type: string, format: uuid, nullable: true }
         quantityM3: { type: string }
         scheduledAt: { type: string, format: date-time }
         dispatchedAt: { type: string, format: date-time, nullable: true }
@@ -5599,6 +5625,11 @@ components:
         truckId: { type: string, format: uuid, nullable: true }
         driverId: { type: string, format: uuid, nullable: true }
         customerName: { type: string }
+        projectName: { type: string, nullable: true }
+        productName:
+          type: string
+          nullable: true
+          description: "Null when the delivery order has no salesOrderLineId (legacy rows created before line selection was required)."
         qcFlagged: { type: boolean }
     DispatchScheduleResponse:
       type: object
@@ -6070,7 +6101,7 @@ components:
       type: object
       required:
         [id, purchaseOrderId, rawMaterialId, quantity, unitPriceJod, taxRateBasisPoints, netJod, taxJod, totalJod,
-         receivedQuantity, varianceQuantity, createdAt, voidedAt]
+         receivedQuantity, varianceQuantity, billedQuantity, createdAt, voidedAt]
       properties:
         id: { type: string, format: uuid }
         purchaseOrderId: { type: string, format: uuid }
@@ -6083,6 +6114,7 @@ components:
         totalJod: { type: string }
         receivedQuantity: { type: string, description: "Sum of goods-receipt lines against this PO line." }
         varianceQuantity: { type: string, description: "receivedQuantity - quantity; positive means over-received." }
+        billedQuantity: { type: string, description: "Sum of vendor-bill lines against this PO line, from non-voided bills." }
         createdAt: { type: string, format: date-time }
         voidedAt: { type: string, format: date-time, nullable: true }
     PurchaseOrder:

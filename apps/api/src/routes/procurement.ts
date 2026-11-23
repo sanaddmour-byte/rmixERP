@@ -349,6 +349,21 @@ async function poLineToApi(tx: Tx, row: PurchaseOrderLineRow) {
     .where(eq(goodsReceiptLine.purchaseOrderLineId, row.id));
   const receivedMilli = receivedRows.reduce((sum, r) => sum + decimalStringToMilliUnits(r.qty), 0n);
   const orderedMilli = decimalStringToMilliUnits(row.quantity);
+  // Billed = sum of vendor-bill lines against this PO line, from bills that
+  // actually represent a real billing event (not voided, not cancelled —
+  // a cancelled bill was always still in `draft`, never posted to GL).
+  const billedRows = await tx
+    .select({ qty: vendorBillLine.quantity })
+    .from(vendorBillLine)
+    .innerJoin(vendorBill, eq(vendorBillLine.vendorBillId, vendorBill.id))
+    .where(
+      and(
+        eq(vendorBillLine.purchaseOrderLineId, row.id),
+        isNull(vendorBill.voidedAt),
+        sql`${vendorBill.status} != 'cancelled'`,
+      ),
+    );
+  const billedMilli = billedRows.reduce((sum, r) => sum + decimalStringToMilliUnits(r.qty), 0n);
   return {
     id: row.id,
     purchaseOrderId: row.purchaseOrderId,
@@ -361,6 +376,7 @@ async function poLineToApi(tx: Tx, row: PurchaseOrderLineRow) {
     totalJod: filsToJodString(fils(row.totalFils)),
     receivedQuantity: milliUnitsToDecimalString(receivedMilli),
     varianceQuantity: milliUnitsToDecimalString(receivedMilli - orderedMilli),
+    billedQuantity: milliUnitsToDecimalString(billedMilli),
     createdAt: row.createdAt.toISOString(),
     voidedAt: row.voidedAt?.toISOString() ?? null,
   };
