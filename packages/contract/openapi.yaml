@@ -2969,6 +2969,36 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "400": { $ref: "#/components/responses/ValidationError" }
 
+  /invoices/{id}/correct-and-resubmit:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: correctAndResubmitInvoice
+      tags: [clearance]
+      summary: >
+        Reopens a clearance-rejected invoice for another attempt: moves it
+        back to `draft`/`pending` clearance status (DOMAIN.md's state
+        machine already allows `rejected -> draft`) and resets the attempt
+        counter, auditing the transition. Only the resubmission path
+        itself — the invoice's own line items/amounts are not editable
+        once created (no invoice-editing capability exists in this
+        system), so a rejection caused by the fiscal data itself (wrong
+        tax number, etc.) needs that corrected upstream (e.g. on the
+        customer record) before resubmitting, not here. Call
+        `/invoices/{id}/submit-for-clearance` afterward to actually
+        resubmit.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoiceDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
   /invoices/{id}/issue:
     parameters:
       - $ref: "#/components/parameters/IdParam"
@@ -3011,6 +3041,51 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "400": { $ref: "#/components/responses/ValidationError" }
 
+  /credit-notes/{id}/correct-and-resubmit:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: correctAndResubmitCreditNote
+      tags: [clearance]
+      summary: >
+        Reopens a clearance-rejected credit note for another attempt —
+        resets its clearance status back to `pending` and the attempt
+        counter, audited. Credit notes have no independent document
+        state machine and no editing capability, so (as with invoices)
+        this only reopens the submission path; it does not change the
+        note's own data. Call `/credit-notes/{id}/submit-for-clearance`
+        afterward to actually resubmit.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreditNote" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /debit-notes/{id}/correct-and-resubmit:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: correctAndResubmitDebitNote
+      tags: [clearance]
+      summary: Reopens a clearance-rejected debit note for another attempt. Same semantics as the credit-note correction endpoint.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DebitNote" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
   /debit-notes/{id}/submit-for-clearance:
     parameters:
       - $ref: "#/components/parameters/IdParam"
@@ -3033,6 +3108,25 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "400": { $ref: "#/components/responses/ValidationError" }
+
+  /clearance-provider-info:
+    get:
+      operationId: getClearanceProviderInfo
+      tags: [clearance]
+      summary: >
+        Which ClearanceProvider is active — lets the clearance queue
+        screen show a persistent "Simulated — not submitted to ISTD"
+        banner whenever the real JoFotaraProvider isn't configured
+        (CLEARANCE_PROVIDER env var), instead of leaving that only
+        inferable from a cleared document's own MOCK-prefixed QR payload.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClearanceProviderInfo" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /clearance-queue:
     get:
@@ -5907,6 +6001,12 @@ components:
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
+    ClearanceProviderInfo:
+      type: object
+      required: [simulated, providerName]
+      properties:
+        simulated: { type: boolean, description: "true when MockClearanceProvider is active — nothing is actually submitted to ISTD." }
+        providerName: { type: string, description: "\"mock\" or \"jofotara\"." }
 
     Collection:
       type: object
