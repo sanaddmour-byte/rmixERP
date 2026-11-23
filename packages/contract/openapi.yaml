@@ -6203,7 +6203,7 @@ components:
       type: object
       required:
         [id, purchaseOrderId, rawMaterialId, quantity, unitPriceJod, taxRateBasisPoints, netJod, taxJod, totalJod,
-         receivedQuantity, varianceQuantity, createdAt, voidedAt]
+         receivedQuantity, varianceQuantity, billedQuantity, remainingBillableQuantity, createdAt, voidedAt]
       properties:
         id: { type: string, format: uuid }
         purchaseOrderId: { type: string, format: uuid }
@@ -6216,6 +6216,8 @@ components:
         totalJod: { type: string }
         receivedQuantity: { type: string, description: "Sum of goods-receipt lines against this PO line." }
         varianceQuantity: { type: string, description: "receivedQuantity - quantity; positive means over-received." }
+        billedQuantity: { type: string, description: "Sum of non-voided vendor-bill lines against this PO line." }
+        remainingBillableQuantity: { type: string, description: "receivedQuantity - billedQuantity, floored at zero — what a vendor bill can still draw on." }
         createdAt: { type: string, format: date-time }
         voidedAt: { type: string, format: date-time, nullable: true }
     PurchaseOrder:
