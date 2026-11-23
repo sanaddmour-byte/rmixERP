@@ -65,8 +65,11 @@ function GanttBoard({ branchId, date, onSelect }: { branchId: string; date: stri
       </CardHeader>
       <CardContent className="space-y-2">
         <div className="relative h-4 text-xs text-navy-400">
-          {HOUR_TICKS.map((h) => (
-            <span key={h} className="absolute top-0" style={{ left: pct(h) }}>
+          {HOUR_TICKS.map((h, i) => (
+            // Every other label hides below sm — 12 fixed-width "00:00"
+            // labels packed into a ~340px-wide phone screen overlap
+            // (each needs ~35px, 390px / 12 ≈ 29px); six 4-hour ticks fit.
+            <span key={h} className={`absolute top-0 ${i % 2 === 1 ? "hidden sm:inline" : ""}`} style={{ left: pct(h) }}>
               {String(h).padStart(2, "0")}:00
             </span>
           ))}
@@ -641,6 +644,7 @@ export function DispatchPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-navy-200 text-left text-navy-500 dark:border-navy-800 dark:text-navy-400">
@@ -696,6 +700,7 @@ export function DispatchPage() {
               })}
             </tbody>
           </table>
+          </div>
           <div className="flex items-center justify-between text-sm text-navy-500 dark:text-navy-400">
             <span>
               Page {page} of {totalPages} ({body?.total ?? 0} total)
