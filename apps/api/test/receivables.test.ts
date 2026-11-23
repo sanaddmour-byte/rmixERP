@@ -1,7 +1,11 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
+import { eq } from "drizzle-orm";
 import { addFils, filsToJodString, jodStringToFils } from "@rmixerp/core";
+import { journalEntry, journalLine, withTenant } from "@rmixerp/db";
 import { createApp } from "../src/app";
+import { db } from "../src/db";
+import { config } from "../src/config";
 import { adminToken } from "./testAuth";
 
 const app = createApp();
@@ -620,5 +624,87 @@ describe("GL postings + statement/aging reconciliation (invoice -> credit note -
     const afterIssued = await request(app).get("/api/reports/aging").set("Authorization", `Bearer ${admin}`);
     const itemAfter = afterIssued.body.items.find((i: { customerId: string }) => i.customerId === customerId);
     expect(itemAfter).toBeTruthy();
+  });
+});
+
+describe("POST /receivables/reconcile-gl-postings (backfill for pre-existing records)", () => {
+  /** Deletes an "invoice" journal entry and its lines directly, simulating a document issued before GL posting existed for it. */
+  async function deleteInvoiceJournalEntry(invoiceId: string): Promise<void> {
+    await withTenant(db, config.companyId, async (tx) => {
+      const [entry] = await tx.select().from(journalEntry).where(eq(journalEntry.sourceDocumentId, invoiceId));
+      if (!entry) throw new Error("expected a journal entry to delete");
+      await tx.delete(journalLine).where(eq(journalLine.journalEntryId, entry.id));
+      await tx.delete(journalEntry).where(eq(journalEntry.id, entry.id));
+    });
+  }
+
+  it("dry-run reports a missing invoice posting without writing one; apply then posts it; a second apply is a no-op", async () => {
+    const customerId = await createCustomer();
+    const { invoiceId } = await createIssuedInvoice(customerId, "2", 30); // posts its own journal entry live
+
+    let entry = await findJournalEntry("invoice", invoiceId);
+    expect(entry).toBeTruthy();
+    await deleteInvoiceJournalEntry(invoiceId); // simulate: created before GL wiring existed
+    entry = await findJournalEntry("invoice", invoiceId);
+    expect(entry).toBeNull();
+
+    const dryRunRes = await request(app).post("/api/receivables/reconcile-gl-postings").set("Authorization", `Bearer ${admin}`).send({ dryRun: true });
+    expect(dryRunRes.status).toBe(200);
+    expect(dryRunRes.body.dryRun).toBe(true);
+    const dryRunMatch = dryRunRes.body.posted.find((p: { sourceDocumentId: string }) => p.sourceDocumentId === invoiceId);
+    expect(dryRunMatch).toBeTruthy();
+    expect(dryRunMatch.sourceDocumentType).toBe("invoice");
+
+    // A true dry run never writes.
+    entry = await findJournalEntry("invoice", invoiceId);
+    expect(entry).toBeNull();
+
+    const applyRes = await request(app).post("/api/receivables/reconcile-gl-postings").set("Authorization", `Bearer ${admin}`).send({ dryRun: false });
+    expect(applyRes.status).toBe(200);
+    expect(applyRes.body.dryRun).toBe(false);
+    const applyMatch = applyRes.body.posted.find((p: { sourceDocumentId: string }) => p.sourceDocumentId === invoiceId);
+    expect(applyMatch).toBeTruthy();
+
+    entry = await findJournalEntry("invoice", invoiceId);
+    expect(entry).toBeTruthy();
+    const arLine = entry!.lines.find((l) => l.accountCode === "1200");
+    const revenueLine = entry!.lines.find((l) => l.accountCode === "4000");
+    expect(arLine?.debitJod).toBe("20.000");
+    expect(revenueLine?.creditJod).toBe("20.000");
+
+    // A second apply must not double-post — postJournalEntry's own retry-safety.
+    const secondApplyRes = await request(app).post("/api/receivables/reconcile-gl-postings").set("Authorization", `Bearer ${admin}`).send({ dryRun: false });
+    const secondApplyMatch = secondApplyRes.body.posted.find((p: { sourceDocumentId: string }) => p.sourceDocumentId === invoiceId);
+    expect(secondApplyMatch).toBeUndefined();
+    expect(secondApplyRes.body.alreadyPosted).toBeGreaterThan(0);
+  });
+
+  it("is idempotent across repeated apply calls and reports already-posted documents separately", async () => {
+    const customerId = await createCustomer();
+    const { invoiceId } = await createIssuedInvoice(customerId, "2", 30);
+    await deleteInvoiceJournalEntry(invoiceId);
+
+    const firstApply = await request(app).post("/api/receivables/reconcile-gl-postings").set("Authorization", `Bearer ${admin}`).send({ dryRun: false });
+    const firstMatch = firstApply.body.posted.find((p: { sourceDocumentId: string }) => p.sourceDocumentId === invoiceId);
+    expect(firstMatch).toBeTruthy();
+
+    const entryAfterFirst = await findJournalEntry("invoice", invoiceId);
+    expect(entryAfterFirst).toBeTruthy();
+
+    // Re-running apply must not double-post: the document now shows up as alreadyPosted, not posted again.
+    const secondApply = await request(app).post("/api/receivables/reconcile-gl-postings").set("Authorization", `Bearer ${admin}`).send({ dryRun: false });
+    const secondMatch = secondApply.body.posted.find((p: { sourceDocumentId: string }) => p.sourceDocumentId === invoiceId);
+    expect(secondMatch).toBeUndefined();
+    expect(secondApply.body.alreadyPosted).toBeGreaterThan(0);
+
+    const entryAfterSecond = await findJournalEntry("invoice", invoiceId);
+    expect(entryAfterSecond!.id).toBe(entryAfterFirst!.id);
+  });
+
+  it("403s without glJournal:approve", async () => {
+    const { noPermissionsToken } = await import("./testAuth");
+    const token = await noPermissionsToken();
+    const res = await request(app).post("/api/receivables/reconcile-gl-postings").set("Authorization", `Bearer ${token}`).send({ dryRun: true });
+    expect(res.status).toBe(403);
   });
 });

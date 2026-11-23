@@ -10,6 +10,7 @@ import {
   debitNote,
   deliveryOrder,
   invoice,
+  journalEntry,
   postDatedCheque,
   salesOrder,
   withTenant,
@@ -26,17 +27,18 @@ import {
   planFifoAllocation,
   subFils,
   validateManualAllocation,
-  WELL_KNOWN_ACCOUNT_CODES,
   ZERO_FILS,
   type Fils,
 } from "@rmixerp/core";
 import {
+  BackfillReceivablesGlPostingsBody,
   BouncePostDatedChequeBody,
   CreateCollectionBody,
   type Collection,
   type CollectionAllocationItem,
   type CollectionDetail,
   type PostDatedCheque as PostDatedChequeApi,
+  type ReconcileReceivablesGlPostingsResponse,
 } from "@rmixerp/contract";
 import { db } from "../db";
 import { requireAuth } from "../middleware/requireAuth";
@@ -48,13 +50,20 @@ import { paramId, queryString } from "../lib/params";
 import { sendCsv } from "../lib/csv";
 import { writeAudit } from "../audit";
 import { computeOutstandingInvoiceExposure } from "../lib/creditExposure";
-import { findWellKnownAccount, postJournalEntry } from "../lib/glPosting";
+import {
+  postCollectionJournalEntry,
+  postInvoiceIssueJournalEntry,
+  postNoteClearanceJournalEntry,
+  postPdcClearJournalEntry,
+  postPdcReversalJournalEntry,
+} from "../lib/receivablesGlPostings";
 import { allocateDocumentNumber } from "./invoices";
 
 export const receivablesRouter = Router();
 const COLLECTIONS_MODULE = "collections";
 const PDC_MODULE = "postDatedCheques";
 const REPORTS_MODULE = "receivablesReports";
+const JOURNAL_MODULE = "glJournal";
 
 type CollectionRow = typeof collection.$inferSelect;
 type CollectionAllocationRow = typeof collectionAllocation.$inferSelect;
@@ -296,21 +305,15 @@ receivablesRouter.post(
       // that: debit Cash for money in hand now, or a separate "PDC in
       // Hand" asset for a cheque that isn't bankable yet — never Cash
       // for a cheque, which would overstate actual cash on hand.
-      const debitAccountCode = input.method === "post_dated_cheque" ? WELL_KNOWN_ACCOUNT_CODES.postDatedChequesInHand : WELL_KNOWN_ACCOUNT_CODES.cash;
-      const debitAccountId = await findWellKnownAccount(tx, req.auth!.companyId, debitAccountCode);
-      const arAccountId = await findWellKnownAccount(tx, req.auth!.companyId, WELL_KNOWN_ACCOUNT_CODES.accountsReceivable);
-      await postJournalEntry(
+      await postCollectionJournalEntry(
         tx,
         req.auth!.companyId,
         input.branchId,
         new Date(input.receivedAt),
-        `Collection ${receiptNumber} received`,
-        "collection",
         collectionRow.id,
-        [
-          { accountId: debitAccountId, debitFils: amountFils, creditFils: ZERO_FILS },
-          { accountId: arAccountId, debitFils: ZERO_FILS, creditFils: amountFils },
-        ],
+        receiptNumber,
+        input.method,
+        amountFils,
       );
 
       for (const line of planLines) {
@@ -476,41 +479,14 @@ async function transitionPdc(
 async function postPdcTransition(tx: Tx, companyId: string, before: PdcRow, action: "clear" | "reverse"): Promise<void> {
   const [collectionRow] = await tx.select().from(collection).where(eq(collection.id, before.collectionId));
   if (!collectionRow) throw new Error("post-dated cheque references a missing collection");
-  const pdcAccountId = await findWellKnownAccount(tx, companyId, WELL_KNOWN_ACCOUNT_CODES.postDatedChequesInHand);
   const amountFils = fils(collectionRow.amountFils);
   if (action === "clear") {
-    const cashAccountId = await findWellKnownAccount(tx, companyId, WELL_KNOWN_ACCOUNT_CODES.cash);
-    await postJournalEntry(
-      tx,
-      companyId,
-      before.branchId,
-      new Date(),
-      `PDC ${before.chequeNumber} cleared`,
-      "post_dated_cheque_clear",
-      before.id,
-      [
-        { accountId: cashAccountId, debitFils: amountFils, creditFils: ZERO_FILS },
-        { accountId: pdcAccountId, debitFils: ZERO_FILS, creditFils: amountFils },
-      ],
-    );
+    await postPdcClearJournalEntry(tx, companyId, before.branchId, new Date(), before.id, before.chequeNumber, amountFils);
   } else {
     // Bounced or cancelled: the cheque was never real money — reverse the
     // original receipt entry so the receivable reopens in the GL exactly
     // as it does in the application layer's own allocation unwind.
-    const arAccountId = await findWellKnownAccount(tx, companyId, WELL_KNOWN_ACCOUNT_CODES.accountsReceivable);
-    await postJournalEntry(
-      tx,
-      companyId,
-      before.branchId,
-      new Date(),
-      `PDC ${before.chequeNumber} reversed`,
-      "post_dated_cheque_reversal",
-      before.id,
-      [
-        { accountId: arAccountId, debitFils: amountFils, creditFils: ZERO_FILS },
-        { accountId: pdcAccountId, debitFils: ZERO_FILS, creditFils: amountFils },
-      ],
-    );
+    await postPdcReversalJournalEntry(tx, companyId, before.branchId, new Date(), before.id, before.chequeNumber, amountFils);
   }
 }
 
@@ -561,6 +537,161 @@ receivablesRouter.post("/post-dated-cheques/:id/cancel", requireAuth, requirePer
     true,
   ),
 );
+
+/**
+ * Backfill for receivables documents created, cleared, or transitioned
+ * before GL posting existed for that document type — the explicit
+ * "dry-run reconciliation and backfill procedure for existing records"
+ * the review asked for, mirroring P0-1's
+ * `/delivery-orders/reconcile-sales-order-line` pattern: audited, safe to
+ * re-run, `dryRun: true` by default. `postJournalEntry` itself is
+ * idempotent per (company, sourceDocumentType, sourceDocumentId), so
+ * calling the same posting recipe for a document that already has an
+ * entry is a safe no-op — but a true dry run must not insert anything,
+ * so this checks existence itself before deciding what to report.
+ *
+ * Requires `glJournal:approve` — this writes financial postings directly,
+ * not a document the application state machine would otherwise produce,
+ * so it should get the same sign-off as any other manual journal entry.
+ */
+receivablesRouter.post("/receivables/reconcile-gl-postings", requireAuth, requirePermission(JOURNAL_MODULE, "approve"), async (req, res) => {
+  const parsed = BackfillReceivablesGlPostingsBody.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json(validationError(parsed.error.flatten()));
+    return;
+  }
+  const dryRun = parsed.data.dryRun;
+
+  const result = await withTenant(db, req.auth!.companyId, async (tx) => {
+    const posted: ReconcileReceivablesGlPostingsResponse["posted"] = [];
+    let alreadyPosted = 0;
+
+    async function alreadyHasEntry(sourceDocumentType: string, sourceDocumentId: string): Promise<boolean> {
+      const [existing] = await tx
+        .select({ id: journalEntry.id })
+        .from(journalEntry)
+        .where(
+          and(
+            eq(journalEntry.companyId, req.auth!.companyId),
+            eq(journalEntry.sourceDocumentType, sourceDocumentType),
+            eq(journalEntry.sourceDocumentId, sourceDocumentId),
+          ),
+        );
+      return !!existing;
+    }
+
+    async function audit(entityType: string, entityId: string, branchId: string) {
+      await writeAudit(tx, {
+        companyId: req.auth!.companyId,
+        branchId,
+        actorUserId: req.auth!.userId,
+        entityType,
+        entityId,
+        action: "backfill:gl_posting",
+        reason: "Reconciliation backfill — POST /receivables/reconcile-gl-postings.",
+      });
+    }
+
+    // Invoices: revenue recognized at issue — any invoice that reached
+    // "issued" (or beyond) should have an "invoice" entry.
+    const invoiceRows = await tx
+      .select()
+      .from(invoice)
+      .where(and(isNull(invoice.voidedAt), inArray(invoice.status, ["issued", "partially_paid", "paid"])));
+    for (const row of invoiceRows) {
+      if (await alreadyHasEntry("invoice", row.id)) {
+        alreadyPosted += 1;
+        continue;
+      }
+      posted.push({ sourceDocumentType: "invoice", sourceDocumentId: row.id, documentNumber: row.invoiceNumber, entryDate: row.invoicedAt.toISOString() });
+      if (dryRun) continue;
+      await postInvoiceIssueJournalEntry(
+        tx,
+        req.auth!.companyId,
+        row.branchId,
+        row.invoicedAt,
+        row.id,
+        row.invoiceNumber,
+        fils(row.subtotalFils),
+        fils(row.taxFils),
+        fils(row.totalFils),
+      );
+      await audit("invoice", row.id, row.branchId);
+    }
+
+    // Credit/debit notes: posted at clearance (see loadCustomerLedgerLines's
+    // same createdAt-as-effective-date-proxy caveat).
+    for (const [table, documentType] of [
+      [creditNote, "credit_note"],
+      [debitNote, "debit_note"],
+    ] as const) {
+      const rows = await tx.select().from(table).where(and(isNull(table.voidedAt), eq(table.clearanceStatus, "cleared")));
+      for (const row of rows) {
+        if (await alreadyHasEntry(documentType, row.id)) {
+          alreadyPosted += 1;
+          continue;
+        }
+        posted.push({ sourceDocumentType: documentType, sourceDocumentId: row.id, documentNumber: row.noteNumber, entryDate: row.createdAt.toISOString() });
+        if (dryRun) continue;
+        await postNoteClearanceJournalEntry(
+          tx,
+          req.auth!.companyId,
+          row.branchId,
+          row.createdAt,
+          documentType,
+          row.id,
+          row.noteNumber,
+          fils(row.amountFils),
+          fils(row.taxFils),
+          fils(row.totalFils),
+        );
+        await audit(documentType, row.id, row.branchId);
+      }
+    }
+
+    // Collections: the allocation (and its GL mirror) applies immediately at creation.
+    const collectionRows = await tx.select().from(collection).where(isNull(collection.voidedAt));
+    for (const row of collectionRows) {
+      if (await alreadyHasEntry("collection", row.id)) {
+        alreadyPosted += 1;
+        continue;
+      }
+      posted.push({ sourceDocumentType: "collection", sourceDocumentId: row.id, documentNumber: row.receiptNumber, entryDate: row.receivedAt.toISOString() });
+      if (dryRun) continue;
+      await postCollectionJournalEntry(tx, req.auth!.companyId, row.branchId, row.receivedAt, row.id, row.receiptNumber, row.method, fils(row.amountFils));
+      await audit("collection", row.id, row.branchId);
+    }
+
+    // Post-dated cheques: "clear" reclassifies PDC-in-Hand -> Cash; "bounce"/"cancel" reverse it back to AR.
+    const pdcRows = await tx
+      .select()
+      .from(postDatedCheque)
+      .where(and(isNull(postDatedCheque.voidedAt), inArray(postDatedCheque.status, ["cleared", "bounced", "cancelled"])));
+    for (const row of pdcRows) {
+      const sourceDocumentType = row.status === "cleared" ? "post_dated_cheque_clear" : "post_dated_cheque_reversal";
+      if (await alreadyHasEntry(sourceDocumentType, row.id)) {
+        alreadyPosted += 1;
+        continue;
+      }
+      const [collectionRow] = await tx.select().from(collection).where(eq(collection.id, row.collectionId));
+      if (!collectionRow) continue; // orphaned reference — nothing sensible to post; surfaced via audit elsewhere, not silently guessed at here.
+      const amountFils = fils(collectionRow.amountFils);
+      const entryDate = row.status === "cleared" ? row.clearedAt ?? row.updatedAt : row.bouncedAt ?? row.updatedAt;
+      posted.push({ sourceDocumentType, sourceDocumentId: row.id, documentNumber: row.chequeNumber, entryDate: entryDate.toISOString() });
+      if (dryRun) continue;
+      if (row.status === "cleared") {
+        await postPdcClearJournalEntry(tx, req.auth!.companyId, row.branchId, entryDate, row.id, row.chequeNumber, amountFils);
+      } else {
+        await postPdcReversalJournalEntry(tx, req.auth!.companyId, row.branchId, entryDate, row.id, row.chequeNumber, amountFils);
+      }
+      await audit(sourceDocumentType, row.id, row.branchId);
+    }
+
+    return { posted, alreadyPosted };
+  });
+
+  res.status(200).json({ dryRun, posted: result.posted, alreadyPosted: result.alreadyPosted } satisfies ReconcileReceivablesGlPostingsResponse);
+});
 
 type StatementLine = {
   date: Date;

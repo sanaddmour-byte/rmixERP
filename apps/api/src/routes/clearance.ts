@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { assertInvoiceTransition, fils, filsToJodString, WELL_KNOWN_ACCOUNT_CODES, ZERO_FILS } from "@rmixerp/core";
+import { assertInvoiceTransition, fils, filsToJodString } from "@rmixerp/core";
 import { creditNote, customer, debitNote, invoice, withTenant } from "@rmixerp/db";
 import { db } from "../db";
 import { requireAuth } from "../middleware/requireAuth";
@@ -13,7 +13,7 @@ import { writeAudit } from "../audit";
 import { notFound, validationError } from "../lib/errors";
 import { paramId, queryString } from "../lib/params";
 import { parsePagination } from "../lib/pagination";
-import { findWellKnownAccount, postJournalEntry } from "../lib/glPosting";
+import { postInvoiceIssueJournalEntry } from "../lib/receivablesGlPostings";
 
 export const clearanceRouter = Router();
 const MODULE = "clearance";
@@ -89,16 +89,17 @@ clearanceRouter.post("/invoices/:id/issue", requireAuth, requirePermission(MODUL
     // customer is actually billed and the receivable becomes real. See
     // docs/JOFOTARA-OPEN-QUESTIONS.md and the flagged finance decisions in
     // the completion report for where this timing choice needs sign-off.
-    const arAccountId = await findWellKnownAccount(tx, req.auth!.companyId, WELL_KNOWN_ACCOUNT_CODES.accountsReceivable);
-    const revenueAccountId = await findWellKnownAccount(tx, req.auth!.companyId, WELL_KNOWN_ACCOUNT_CODES.revenue);
-    const taxOutputAccountId = await findWellKnownAccount(tx, req.auth!.companyId, WELL_KNOWN_ACCOUNT_CODES.taxOutput);
-
-    const journalLines = [
-      { accountId: arAccountId, debitFils: fils(after.totalFils), creditFils: ZERO_FILS },
-      { accountId: revenueAccountId, debitFils: ZERO_FILS, creditFils: fils(after.subtotalFils) },
-      ...(fils(after.taxFils) > ZERO_FILS ? [{ accountId: taxOutputAccountId, debitFils: ZERO_FILS, creditFils: fils(after.taxFils) }] : []),
-    ];
-    await postJournalEntry(tx, req.auth!.companyId, before.branchId, new Date(), `Invoice ${after.invoiceNumber} issued`, "invoice", id, journalLines);
+    await postInvoiceIssueJournalEntry(
+      tx,
+      req.auth!.companyId,
+      before.branchId,
+      new Date(),
+      id,
+      after.invoiceNumber,
+      fils(after.subtotalFils),
+      fils(after.taxFils),
+      fils(after.totalFils),
+    );
     return { kind: "ok" as const };
   });
 

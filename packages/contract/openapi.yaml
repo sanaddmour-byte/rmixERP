@@ -3250,6 +3250,35 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "400": { $ref: "#/components/responses/ValidationError" }
 
+  /receivables/reconcile-gl-postings:
+    post:
+      operationId: backfillReceivablesGlPostings
+      tags: [receivables]
+      summary: >
+        Backfill journal entries for receivables documents (issued/
+        partially-paid/paid invoices, cleared credit/debit notes,
+        collections, cleared/bounced/cancelled post-dated cheques) that
+        predate GL posting being wired up for that document type.
+        `postJournalEntry` is itself idempotent per source document, so
+        this is safe to call repeatedly — a document that already has a
+        journal entry is left untouched and reported as `alreadyPosted`.
+        Each backfilled entry is dated to the document's own historical
+        effective date (e.g. `invoicedAt`), not the day the backfill ran.
+        `dryRun: true` (the default) previews without writing.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReconcileReceivablesGlPostingsRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReconcileReceivablesGlPostingsResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
   /reports/customer-statement:
     get:
       operationId: getCustomerStatement
@@ -5606,6 +5635,29 @@ components:
               salesOrderId: { type: string, format: uuid }
               candidateLineCount: { type: integer }
               reason: { type: string }
+    ReconcileReceivablesGlPostingsRequest:
+      type: object
+      properties:
+        dryRun: { type: boolean, default: true }
+    ReconcileReceivablesGlPostingsResponse:
+      type: object
+      required: [dryRun, posted, alreadyPosted]
+      properties:
+        dryRun: { type: boolean }
+        posted:
+          type: array
+          description: Documents that were (or, if dryRun, would be) backfilled with a new journal entry.
+          items:
+            type: object
+            required: [sourceDocumentType, sourceDocumentId, documentNumber, entryDate]
+            properties:
+              sourceDocumentType: { type: string }
+              sourceDocumentId: { type: string, format: uuid }
+              documentNumber: { type: string }
+              entryDate: { type: string, format: date-time }
+        alreadyPosted:
+          type: integer
+          description: Count of qualifying documents that already had a journal entry and were left untouched.
     UpdateDeliveryOrderRequest:
       type: object
       properties:
