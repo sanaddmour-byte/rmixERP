@@ -62,6 +62,15 @@ export interface Translations {
     welcome: (name: string) => string;
     subtitle: string;
     systemStatus: string;
+    workQueuesTitle: string;
+    unassignedLoads: string;
+    unassignedLoadsDesc: string;
+    qcHolds: string;
+    qcHoldsDesc: string;
+    deliveredUnbilled: string;
+    deliveredUnbilledDesc: string;
+    noWorkQueues: string;
+    allModules: string;
   };
   reportsHub: {
     title: string;
@@ -177,6 +186,15 @@ export const translations: Record<Locale, Translations> = {
       welcome: (name) => `Welcome back, ${name}`,
       subtitle: "Jump into an application below.",
       systemStatus: "System status",
+      workQueuesTitle: "Your work queues",
+      unassignedLoads: "Unassigned loads",
+      unassignedLoadsDesc: "Scheduled today with no truck or driver yet",
+      qcHolds: "QC holds",
+      qcHoldsDesc: "Cube tests that failed at design age",
+      deliveredUnbilled: "Delivered, not yet invoiced",
+      deliveredUnbilledDesc: "Deliveries ready to bill",
+      noWorkQueues: "Nothing needs your attention right now.",
+      allModules: "All modules",
     },
     reportsHub: {
       title: "Reports",
@@ -290,6 +308,15 @@ export const translations: Record<Locale, Translations> = {
       welcome: (name) => `مرحباً بعودتك، ${name}`,
       subtitle: "انتقل إلى أحد التطبيقات أدناه.",
       systemStatus: "حالة النظام",
+      workQueuesTitle: "قوائم عملك",
+      unassignedLoads: "حمولات غير معيّنة",
+      unassignedLoadsDesc: "مجدولة اليوم بدون شاحنة أو سائق بعد",
+      qcHolds: "حالات تعليق الجودة",
+      qcHoldsDesc: "اختبارات مكعبات فشلت عند عمر التصميم",
+      deliveredUnbilled: "تم التسليم، لم تتم الفوترة بعد",
+      deliveredUnbilledDesc: "تسليمات جاهزة للفوترة",
+      noWorkQueues: "لا يوجد ما يحتاج انتباهك الآن.",
+      allModules: "جميع الوحدات",
     },
     reportsHub: {
       title: "التقارير",

@@ -164,6 +164,7 @@ function InvoiceDetailPanel({ id, onSelect }: { id: string; onSelect: (id: strin
               <th className="py-2 pe-4 font-medium">Net</th>
               <th className="py-2 pe-4 font-medium">Tax</th>
               <th className="py-2 pe-4 font-medium">Total</th>
+              <th className="py-2 pe-4 font-medium">Delivery</th>
             </tr>
           </thead>
           <tbody>
@@ -174,6 +175,15 @@ function InvoiceDetailPanel({ id, onSelect }: { id: string; onSelect: (id: strin
                 <td className="py-2 pe-4">{l.netJod}</td>
                 <td className="py-2 pe-4">{l.taxJod}</td>
                 <td className="py-2 pe-4">{l.totalJod}</td>
+                <td className="py-2 pe-4">
+                  {l.deliveryOrderId ? (
+                    <Link href={`/dispatch?id=${l.deliveryOrderId}`} className="text-orange-600 hover:underline dark:text-orange-400">
+                      View delivery
+                    </Link>
+                  ) : (
+                    <span className="text-navy-400">—</span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

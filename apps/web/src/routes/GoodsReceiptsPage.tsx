@@ -165,12 +165,13 @@ export function GoodsReceiptsPage() {
                 <th className="py-2 pe-4 font-medium">Receipt #</th>
                 <th className="py-2 pe-4 font-medium">Received</th>
                 <th className="py-2 pe-4 font-medium">Notes</th>
+                <th className="py-2 pe-4 font-medium">Purchase Order</th>
               </tr>
             </thead>
             <tbody>
               {!list.isLoading && (body?.items.length ?? 0) === 0 && (
                 <tr>
-                  <td colSpan={3} className="py-4 text-center text-navy-400 dark:text-navy-500">
+                  <td colSpan={4} className="py-4 text-center text-navy-400 dark:text-navy-500">
                     No records yet.
                   </td>
                 </tr>
@@ -180,6 +181,11 @@ export function GoodsReceiptsPage() {
                   <td className="py-2 pe-4">{row.receiptNumber}</td>
                   <td className="py-2 pe-4">{new Date(row.receivedAt).toLocaleString()}</td>
                   <td className="py-2 pe-4">{row.notes ?? "—"}</td>
+                  <td className="py-2 pe-4">
+                    <Link href={`/purchase-orders?id=${row.purchaseOrderId}`} className="text-orange-600 hover:underline dark:text-orange-400">
+                      View PO
+                    </Link>
+                  </td>
                 </tr>
               ))}
             </tbody>

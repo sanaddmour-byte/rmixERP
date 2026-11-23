@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useSearchParams } from "wouter";
 import {
   useGetCubeTestTraceability,
   useListAllCubeTestSets,
@@ -40,8 +41,11 @@ function CubeTestDetail({ id }: { id: string }) {
 }
 
 export function QCPage() {
+  const [searchParams] = useSearchParams();
   const [page, setPage] = React.useState(1);
-  const [result, setResult] = React.useState<ListAllCubeTestSetsResult | "">("");
+  const [result, setResult] = React.useState<ListAllCubeTestSetsResult | "">(
+    () => (searchParams.get("result") as ListAllCubeTestSetsResult | null) ?? "",
+  );
   const [branchId, setBranchId] = React.useState("");
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
 

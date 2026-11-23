@@ -470,7 +470,7 @@ export function DispatchPage() {
   const [status, setStatus] = React.useState<DeliveryOrderStatus | "">("");
   const [truckFilter, setTruckFilter] = React.useState("");
   const [driverFilter, setDriverFilter] = React.useState("");
-  const [unassignedOnly, setUnassignedOnly] = React.useState(false);
+  const [unassignedOnly, setUnassignedOnly] = React.useState(() => searchParams.get("unassigned") === "true");
   const [selectedId, setSelectedIdState] = React.useState<string | null>(() => searchParams.get("id"));
   const [showNewDelivery, setShowNewDelivery] = React.useState(false);
   const [salesOrderFilterId] = React.useState(() => searchParams.get("salesOrderId") ?? "");

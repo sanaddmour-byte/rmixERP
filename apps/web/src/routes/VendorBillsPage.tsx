@@ -211,13 +211,14 @@ export function VendorBillsPage() {
                 <th className="py-2 pe-4 font-medium">Total (JOD)</th>
                 <th className="py-2 pe-4 font-medium">Allocated (JOD)</th>
                 <th className="py-2 pe-4 font-medium">Due</th>
+                <th className="py-2 pe-4 font-medium">Purchase Order</th>
                 <th className="py-2" />
               </tr>
             </thead>
             <tbody>
               {!list.isLoading && filteredItems.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-4 text-center text-navy-400 dark:text-navy-500">
+                  <td colSpan={7} className="py-4 text-center text-navy-400 dark:text-navy-500">
                     No records yet.
                   </td>
                 </tr>
@@ -231,6 +232,11 @@ export function VendorBillsPage() {
                   <td className="py-2 pe-4">{row.totalJod}</td>
                   <td className="py-2 pe-4">{row.allocatedJod}</td>
                   <td className="py-2 pe-4">{new Date(row.dueDate).toLocaleDateString()}</td>
+                  <td className="py-2 pe-4">
+                    <Link href={`/purchase-orders?id=${row.purchaseOrderId}`} className="text-orange-600 hover:underline dark:text-orange-400">
+                      View PO
+                    </Link>
+                  </td>
                   <td className="py-2 text-end">
                     {row.status === "draft" && permissions.approve && (
                       <Button size="sm" disabled={approve.isPending} onClick={() => approve.mutate({ id: row.id })}>
