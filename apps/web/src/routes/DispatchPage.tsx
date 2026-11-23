@@ -470,7 +470,9 @@ export function DispatchPage() {
   const [page, setPage] = React.useState(1);
   const [branchId, setBranchId] = React.useState("");
   const [date, setDate] = React.useState(todayInAmman());
-  const [status, setStatus] = React.useState<DeliveryOrderStatus | "">("");
+  const [status, setStatus] = React.useState<DeliveryOrderStatus | "">(
+    () => (searchParams.get("status") as DeliveryOrderStatus | null) ?? "",
+  );
   const [truckFilter, setTruckFilter] = React.useState("");
   const [driverFilter, setDriverFilter] = React.useState("");
   const [selectedId, setSelectedIdState] = React.useState<string | null>(() => searchParams.get("id"));

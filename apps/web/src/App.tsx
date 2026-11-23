@@ -1,7 +1,9 @@
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import { Toaster } from "@rmixerp/ui";
 import { Sidebar } from "./components/Sidebar";
 import { CommandPalette } from "./components/CommandPalette";
+import { getAccessToken } from "./lib/session";
+import { useCurrentUser } from "./lib/useCurrentUser";
 import { HomePage } from "./routes/HomePage";
 import { ReportsPage } from "./routes/ReportsPage";
 import { HealthPage } from "./routes/HealthPage";
@@ -44,12 +46,27 @@ import { NotificationsPage } from "./routes/NotificationsPage";
 import { ActionCenterPage } from "./routes/ActionCenterPage";
 
 export function App() {
+  const [location] = useLocation();
+  const { data: currentUser } = useCurrentUser();
+  const signedIn = Boolean(getAccessToken()) && currentUser?.status === 200;
+
+  // Signed-out users land on a full-width sign-in screen — no sidebar
+  // rail competing for space on a page whose only job is the login form.
+  if (location === "/login" && !signedIn) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-navy-50 p-6 dark:bg-navy-950">
+        <Toaster />
+        <LoginPage />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen bg-navy-50 text-navy-900 dark:bg-navy-950 dark:text-navy-100">
+    <div className="flex min-h-screen flex-col bg-navy-50 text-navy-900 dark:bg-navy-950 dark:text-navy-100 md:flex-row">
       <Sidebar />
       <CommandPalette />
       <Toaster />
-      <main className="min-w-0 flex-1 p-6">
+      <main className="min-w-0 flex-1 p-4 md:p-6">
         <Switch>
           <Route path="/action-center" component={ActionCenterPage} />
           <Route path="/login" component={LoginPage} />

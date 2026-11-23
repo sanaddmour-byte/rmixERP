@@ -89,6 +89,11 @@ export interface Translations {
     welcome: (name: string) => string;
     subtitle: string;
     systemStatus: string;
+    allModules: string;
+    queueUnassignedLoads: string;
+    queueQcHolds: string;
+    queueDeliveredUnbilled: string;
+    queueClearanceExceptions: string;
   };
   reportsHub: {
     title: string;
@@ -232,6 +237,11 @@ export const translations: Record<Locale, Translations> = {
       welcome: (name) => `Welcome back, ${name}`,
       subtitle: "Jump into an application below.",
       systemStatus: "System status",
+      allModules: "All modules",
+      queueUnassignedLoads: "Unassigned loads",
+      queueQcHolds: "QC holds",
+      queueDeliveredUnbilled: "Delivered, not yet billed",
+      queueClearanceExceptions: "Clearance exceptions",
     },
     reportsHub: {
       title: "Reports",
@@ -373,6 +383,11 @@ export const translations: Record<Locale, Translations> = {
       welcome: (name) => `مرحباً بعودتك، ${name}`,
       subtitle: "انتقل إلى أحد التطبيقات أدناه.",
       systemStatus: "حالة النظام",
+      allModules: "جميع الوحدات",
+      queueUnassignedLoads: "حمولات غير مُسندة",
+      queueQcHolds: "حالات إيقاف الجودة",
+      queueDeliveredUnbilled: "تم التسليم ولم تتم الفوترة",
+      queueClearanceExceptions: "استثناءات التخليص",
     },
     reportsHub: {
       title: "التقارير",

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useSearchParams } from "wouter";
 import {
   useListClearanceQueue,
   useSubmitCreditNoteForClearance,
@@ -25,8 +26,11 @@ const PAGE_SIZE = 20;
  */
 export function ClearanceQueuePage() {
   const permissions = useModulePermissions("clearance");
+  const [searchParams] = useSearchParams();
   const [page, setPage] = React.useState(1);
-  const [status, setStatus] = React.useState<ClearanceStatus | "">("");
+  const [status, setStatus] = React.useState<ClearanceStatus | "">(
+    () => (searchParams.get("status") as ClearanceStatus | null) ?? "",
+  );
   const [documentType, setDocumentType] = React.useState<DocumentType | "">("");
 
   const list = useListClearanceQueue({
