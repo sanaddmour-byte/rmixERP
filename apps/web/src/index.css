@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/* Tailwind v4's automatic content detection excludes node_modules by
+   default, and packages/ui is only reachable from here through the pnpm
+   workspace symlink at node_modules/@rmixerp/ui — so without this, any
+   class used ONLY inside packages/ui/src (not also incidentally used
+   somewhere in apps/web/src) silently never gets generated. Found by
+   this exact failure mode: Button's `accent` variant (bg-orange-700,
+   hover:bg-orange-800) compiled into the JS bundle but never appeared in
+   the output CSS, rendering as an invisible, colorless button. */
+@source "../../../packages/ui/src";
+
 /* Explicit light/dark toggle (not just OS preference) — driven by a `.dark`
    class on <html>, set by ThemeContext. */
 @custom-variant dark (&:where(.dark, .dark *));
