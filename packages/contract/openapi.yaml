@@ -1507,6 +1507,9 @@ paths:
         - name: customerId
           in: query
           schema: { type: string, format: uuid }
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
       responses:
         "200":
           description: OK
@@ -2584,6 +2587,14 @@ paths:
           in: query
           description: Filter to deliveries assigned to one driver — the mobile driver app's "my deliveries" list.
           schema: { type: string, format: uuid }
+        - name: truckId
+          in: query
+          description: Filter to deliveries assigned to one truck.
+          schema: { type: string, format: uuid }
+        - name: unassigned
+          in: query
+          description: When true, filter to deliveries with no truck or driver assigned yet (the dispatch board's "unassigned loads" view).
+          schema: { type: boolean }
         - name: salesOrderId
           in: query
           description: Filter to deliveries drawn from one sales order — the sales-order detail screen's "see its deliveries" link.
@@ -2726,6 +2737,32 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "400": { $ref: "#/components/responses/ValidationError" }
+
+  /delivery-orders/reconcile-sales-order-line:
+    post:
+      operationId: reconcileDeliveryOrderSalesOrderLine
+      tags: [deliveryOrders]
+      summary: >
+        Backfill `salesOrderLineId` on existing non-voided delivery orders
+        created before that field was required (see
+        CreateDeliveryOrderRequest). Only unambiguous matches — a delivery
+        whose sales order has exactly one non-voided line — are backfilled;
+        every write is audited. Everything else (zero or multiple candidate
+        lines) is returned under `needsReview` instead of guessed at.
+        `dryRun: true` (the default) previews the backfill without writing.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReconcileSalesOrderLineRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReconcileSalesOrderLineResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /dispatch/schedule:
     get:
@@ -4950,7 +4987,7 @@ components:
       required:
         [id, companyId, salesOrderId, productId, quantityM3, priceListId, priceResolutionTier,
          concreteUnitPriceJod, deliveryUnitPriceJod, taxRateBasisPoints, netJod, taxJod, totalJod,
-         charges, createdAt, updatedAt, voidedAt]
+         charges, deliveredQuantityM3, remainingQuantityM3, createdAt, updatedAt, voidedAt]
       properties:
         id: { type: string, format: uuid }
         companyId: { type: string, format: uuid }
@@ -4966,6 +5003,12 @@ components:
         taxJod: { type: string }
         totalJod: { type: string }
         charges: { type: array, items: { $ref: "#/components/schemas/LineCharge" } }
+        deliveredQuantityM3:
+          type: string
+          description: "Sum of quantityM3 across every non-voided delivery order referencing this line, any status."
+        remainingQuantityM3:
+          type: string
+          description: "quantityM3 - deliveredQuantityM3. Can go negative if over-delivered; the UI should treat <= 0 as ineligible for a new delivery."
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         voidedAt: { type: string, format: date-time, nullable: true }
@@ -5478,8 +5521,11 @@ components:
          driverId, quantityM3, status, scheduledAt, dispatchedAt, deliveredAt, qcFlagged, qcFlagReason,
          creditCheckPolicy, creditCheckOutstandingJod, creditCheckExceedsByJod, creditOverride, creditOverrideReason,
          creditOverrideBy, documentExpiryOverride, documentExpiryOverrideReason, documentExpiryOverrideBy, notes,
-         createdAt, updatedAt, voidedAt]
+         customerName, projectName, productName, createdAt, updatedAt, voidedAt]
       properties:
+        customerName: { type: string, description: "Joined from the sales order's customer — display-only." }
+        projectName: { type: string, nullable: true, description: "Joined from the sales order's project, when it has one." }
+        productName: { type: string, nullable: true, description: "Joined from salesOrderLineId's product; null for a legacy delivery with no line." }
         id: { type: string, format: uuid }
         companyId: { type: string, format: uuid }
         branchId: { type: string, format: uuid }
@@ -5517,16 +5563,49 @@ components:
         voidedAt: { type: string, format: date-time, nullable: true }
     CreateDeliveryOrderRequest:
       type: object
-      required: [branchId, salesOrderId, quantityM3, scheduledAt]
+      required: [branchId, salesOrderId, salesOrderLineId, quantityM3, scheduledAt]
       properties:
         branchId: { type: string, format: uuid }
         salesOrderId: { type: string, format: uuid }
-        salesOrderLineId: { type: string, format: uuid, nullable: true }
+        salesOrderLineId:
+          type: string
+          format: uuid
+          description: Must belong to salesOrderId (validated server-side) and have remaining undelivered quantity. Required so every delivery created going forward is invoiceable; pre-existing deliveries created before this rule may still carry a null value, see POST /delivery-orders/reconcile-sales-order-line.
         productionOrderId: { type: string, format: uuid, nullable: true }
         batchRecordId: { type: string, format: uuid, nullable: true }
         quantityM3: { type: string }
         scheduledAt: { type: string, format: date-time }
         notes: { type: string, nullable: true }
+    ReconcileSalesOrderLineRequest:
+      type: object
+      properties:
+        dryRun: { type: boolean, default: true }
+    ReconcileSalesOrderLineResponse:
+      type: object
+      required: [dryRun, backfilled, needsReview]
+      properties:
+        dryRun: { type: boolean }
+        backfilled:
+          type: array
+          description: Delivery orders that were (or, if dryRun, would be) updated.
+          items:
+            type: object
+            required: [deliveryOrderId, salesOrderId, salesOrderLineId]
+            properties:
+              deliveryOrderId: { type: string, format: uuid }
+              salesOrderId: { type: string, format: uuid }
+              salesOrderLineId: { type: string, format: uuid }
+        needsReview:
+          type: array
+          description: Delivery orders with a null salesOrderLineId that could not be backfilled unambiguously.
+          items:
+            type: object
+            required: [deliveryOrderId, salesOrderId, candidateLineCount, reason]
+            properties:
+              deliveryOrderId: { type: string, format: uuid }
+              salesOrderId: { type: string, format: uuid }
+              candidateLineCount: { type: integer }
+              reason: { type: string }
     UpdateDeliveryOrderRequest:
       type: object
       properties:
@@ -5588,7 +5667,7 @@ components:
     DispatchScheduleItem:
       type: object
       required:
-        [id, status, quantityM3, scheduledAt, dispatchedAt, deliveredAt, truckId, driverId, customerName, qcFlagged]
+        [id, status, quantityM3, scheduledAt, dispatchedAt, deliveredAt, truckId, driverId, customerName, projectName, productName, qcFlagged]
       properties:
         id: { type: string, format: uuid }
         status: { type: string, enum: [planned, dispatched, delivered, invoiced] }
@@ -5599,6 +5678,8 @@ components:
         truckId: { type: string, format: uuid, nullable: true }
         driverId: { type: string, format: uuid, nullable: true }
         customerName: { type: string }
+        projectName: { type: string, nullable: true }
+        productName: { type: string, nullable: true }
         qcFlagged: { type: boolean }
     DispatchScheduleResponse:
       type: object

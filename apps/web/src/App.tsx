@@ -42,7 +42,9 @@ import { NotificationsPage } from "./routes/NotificationsPage";
 
 export function App() {
   return (
-    <div className="flex min-h-screen bg-navy-50 text-navy-900 dark:bg-navy-950 dark:text-navy-100">
+    // A neutral gray canvas, not a navy tint — the work surface (Card) is
+    // white, so this just needs to recede, not read as part of the brand.
+    <div className="flex min-h-screen bg-gray-50 text-navy-900 dark:bg-navy-950 dark:text-navy-100">
       <Sidebar />
       <main className="min-w-0 flex-1 p-6">
         <Switch>

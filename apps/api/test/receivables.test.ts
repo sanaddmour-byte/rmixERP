@@ -419,12 +419,18 @@ describe("reports", () => {
     await createIssuedInvoice(customerId, "1", 5); // 10 JOD, over the 5 JOD limit
 
     const orderRes = await request(app).post("/api/sales-orders").set("Authorization", `Bearer ${admin}`).send({ customerId, branchId });
-    await request(app).post(`/api/sales-orders/${orderRes.body.id}/lines`).set("Authorization", `Bearer ${admin}`).send({ productId, quantityM3: "1" });
+    const lineRes = await request(app).post(`/api/sales-orders/${orderRes.body.id}/lines`).set("Authorization", `Bearer ${admin}`).send({ productId, quantityM3: "1" });
     await request(app).post(`/api/sales-orders/${orderRes.body.id}/confirm`).set("Authorization", `Bearer ${admin}`);
     const deliveryRes = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, salesOrderId: orderRes.body.id, quantityM3: "1", scheduledAt: "2026-01-15T08:00:00.000Z" });
+      .send({
+        branchId,
+        salesOrderId: orderRes.body.id,
+        salesOrderLineId: lineRes.body.lines[0].id,
+        quantityM3: "1",
+        scheduledAt: "2026-01-15T08:00:00.000Z",
+      });
     await request(app).put(`/api/customers/${customerId}`).set("Authorization", `Bearer ${admin}`).send({ creditPolicy: "block" });
     const truck = await request(app)
       .post("/api/trucks")

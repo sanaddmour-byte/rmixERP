@@ -1,7 +1,11 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
+import { and, eq } from "drizzle-orm";
+import { auditLog, deliveryOrder, withTenant } from "@rmixerp/db";
 import { createApp } from "../src/app";
-import { adminToken } from "./testAuth";
+import { db } from "../src/db";
+import { config } from "../src/config";
+import { adminToken, noPermissionsToken } from "./testAuth";
 
 const app = createApp();
 let admin: string;
@@ -61,12 +65,12 @@ async function createConfirmedSalesOrder(customerId: string, quantityM3: string)
     .post("/api/sales-orders")
     .set("Authorization", `Bearer ${admin}`)
     .send({ customerId, branchId });
-  await request(app)
+  const lineRes = await request(app)
     .post(`/api/sales-orders/${created.body.id}/lines`)
     .set("Authorization", `Bearer ${admin}`)
     .send({ productId, quantityM3 });
   await request(app).post(`/api/sales-orders/${created.body.id}/confirm`).set("Authorization", `Bearer ${admin}`);
-  return created.body.id as string;
+  return { salesOrderId: created.body.id as string, salesOrderLineId: lineRes.body.lines[0].id as string };
 }
 
 async function createTruckAndDriver() {
@@ -124,12 +128,12 @@ async function createIssuedInvoiceForCustomer(customerId: string, quantityM3: st
 describe("delivery orders — creation", () => {
   it("creates a planned delivery order against a confirmed sales order", async () => {
     const customerId = await createCustomer();
-    const salesOrderId = await createConfirmedSalesOrder(customerId, "10");
+    const { salesOrderId, salesOrderLineId } = await createConfirmedSalesOrder(customerId, "10");
 
     const res = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, salesOrderId, quantityM3: "10", scheduledAt: "2026-01-15T08:00:00.000Z" });
+      .send({ branchId, salesOrderId, salesOrderLineId, quantityM3: "10", scheduledAt: "2026-01-15T08:00:00.000Z" });
     expect(res.status).toBe(201);
     expect(res.body.status).toBe("planned");
     expect(res.body.qcFlagged).toBe(false);
@@ -141,11 +145,33 @@ describe("delivery orders — creation", () => {
       .post("/api/sales-orders")
       .set("Authorization", `Bearer ${admin}`)
       .send({ customerId, branchId });
+    const lineRes = await request(app)
+      .post(`/api/sales-orders/${created.body.id}/lines`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ productId, quantityM3: "5" });
 
     const res = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, salesOrderId: created.body.id, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
+      .send({
+        branchId,
+        salesOrderId: created.body.id,
+        salesOrderLineId: lineRes.body.lines[0].id,
+        quantityM3: "5",
+        scheduledAt: "2026-01-15T08:00:00.000Z",
+      });
+    expect(res.status).toBe(400);
+  });
+
+  it("400s creating a delivery order whose salesOrderLineId belongs to a different sales order", async () => {
+    const customerId = await createCustomer();
+    const { salesOrderId } = await createConfirmedSalesOrder(customerId, "10");
+    const { salesOrderLineId: otherLineId } = await createConfirmedSalesOrder(customerId, "10");
+
+    const res = await request(app)
+      .post("/api/delivery-orders")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, salesOrderId, salesOrderLineId: otherLineId, quantityM3: "10", scheduledAt: "2026-01-15T08:00:00.000Z" });
     expect(res.status).toBe(400);
   });
 });
@@ -153,11 +179,11 @@ describe("delivery orders — creation", () => {
 describe("delivery orders — dispatch and deliver lifecycle", () => {
   it("dispatches, then delivers with proof of delivery", async () => {
     const customerId = await createCustomer();
-    const salesOrderId = await createConfirmedSalesOrder(customerId, "10");
+    const { salesOrderId, salesOrderLineId } = await createConfirmedSalesOrder(customerId, "10");
     const created = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, salesOrderId, quantityM3: "10", scheduledAt: "2026-01-15T08:00:00.000Z" });
+      .send({ branchId, salesOrderId, salesOrderLineId, quantityM3: "10", scheduledAt: "2026-01-15T08:00:00.000Z" });
     const id = created.body.id as string;
     const { truckId, driverId } = await createTruckAndDriver();
 
@@ -183,11 +209,11 @@ describe("delivery orders — dispatch and deliver lifecycle", () => {
 
   it("cannot be delivered without going through dispatch (no separate mark-delivered path)", async () => {
     const customerId = await createCustomer();
-    const salesOrderId = await createConfirmedSalesOrder(customerId, "5");
+    const { salesOrderId, salesOrderLineId } = await createConfirmedSalesOrder(customerId, "5");
     const created = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, salesOrderId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
+      .send({ branchId, salesOrderId, salesOrderLineId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
     const id = created.body.id as string;
 
     const res = await request(app)
@@ -209,11 +235,11 @@ describe("delivery orders — dispatch and deliver lifecycle", () => {
   it("blocks dispatch under credit policy 'block' when the limit is exceeded, with no override", async () => {
     const customerId = await createCustomer({ creditPolicy: "warning", creditLimitJod: "50.000" });
     await createIssuedInvoiceForCustomer(customerId, "3"); // 60 JOD outstanding, over the 50 JOD limit on its own
-    const salesOrderId = await createConfirmedSalesOrder(customerId, "10");
+    const { salesOrderId, salesOrderLineId } = await createConfirmedSalesOrder(customerId, "10");
     const created = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, salesOrderId, quantityM3: "10", scheduledAt: "2026-01-15T08:00:00.000Z" });
+      .send({ branchId, salesOrderId, salesOrderLineId, quantityM3: "10", scheduledAt: "2026-01-15T08:00:00.000Z" });
     expect(created.status).toBe(201);
     await request(app)
       .put(`/api/customers/${customerId}`)
@@ -237,11 +263,11 @@ describe("delivery orders — dispatch and deliver lifecycle", () => {
   it("dispatches a blocked delivery order with a mandatory-reason override, and audits it", async () => {
     const customerId = await createCustomer({ creditPolicy: "warning", creditLimitJod: "50.000" });
     await createIssuedInvoiceForCustomer(customerId, "3"); // 60 JOD outstanding, over the 50 JOD limit on its own
-    const salesOrderId = await createConfirmedSalesOrder(customerId, "10");
+    const { salesOrderId, salesOrderLineId } = await createConfirmedSalesOrder(customerId, "10");
     const created = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, salesOrderId, quantityM3: "10", scheduledAt: "2026-01-15T08:00:00.000Z" });
+      .send({ branchId, salesOrderId, salesOrderLineId, quantityM3: "10", scheduledAt: "2026-01-15T08:00:00.000Z" });
     expect(created.status).toBe(201);
     await request(app)
       .put(`/api/customers/${customerId}`)
@@ -263,11 +289,11 @@ describe("delivery orders — dispatch and deliver lifecycle", () => {
 describe("delivery orders — document-expiry hard block at dispatch (Phase 10)", () => {
   it("422s dispatch when the assigned truck has an already-expired registration, with no override", async () => {
     const customerId = await createCustomer();
-    const salesOrderId = await createConfirmedSalesOrder(customerId, "5");
+    const { salesOrderId, salesOrderLineId } = await createConfirmedSalesOrder(customerId, "5");
     const created = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, salesOrderId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
+      .send({ branchId, salesOrderId, salesOrderLineId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
     const truckRes = await request(app)
       .post("/api/trucks")
       .set("Authorization", `Bearer ${admin}`)
@@ -291,11 +317,11 @@ describe("delivery orders — document-expiry hard block at dispatch (Phase 10)"
 
   it("422s dispatch when the assigned driver's license has expired", async () => {
     const customerId = await createCustomer();
-    const salesOrderId = await createConfirmedSalesOrder(customerId, "5");
+    const { salesOrderId, salesOrderLineId } = await createConfirmedSalesOrder(customerId, "5");
     const created = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, salesOrderId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
+      .send({ branchId, salesOrderId, salesOrderLineId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
     const { truckId } = await createTruckAndDriver();
     const driverRes = await request(app)
       .post("/api/drivers")
@@ -312,11 +338,11 @@ describe("delivery orders — document-expiry hard block at dispatch (Phase 10)"
 
   it("dispatches an expired-document truck/driver with a mandatory-reason override, and audits it", async () => {
     const customerId = await createCustomer();
-    const salesOrderId = await createConfirmedSalesOrder(customerId, "5");
+    const { salesOrderId, salesOrderLineId } = await createConfirmedSalesOrder(customerId, "5");
     const created = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, salesOrderId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
+      .send({ branchId, salesOrderId, salesOrderLineId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
     const truckRes = await request(app)
       .post("/api/trucks")
       .set("Authorization", `Bearer ${admin}`)
@@ -338,11 +364,11 @@ describe("delivery orders — document-expiry hard block at dispatch (Phase 10)"
 
   it("does not block or warn on a truck/driver with no tracked expiry dates", async () => {
     const customerId = await createCustomer();
-    const salesOrderId = await createConfirmedSalesOrder(customerId, "5");
+    const { salesOrderId, salesOrderLineId } = await createConfirmedSalesOrder(customerId, "5");
     const created = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, salesOrderId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
+      .send({ branchId, salesOrderId, salesOrderLineId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
     const { truckId, driverId } = await createTruckAndDriver();
 
     const res = await request(app)
@@ -387,13 +413,14 @@ describe("QC flag propagation onto deliveries (DOMAIN.md Invariant 6)", () => {
       .send({ ageDays: 28, specimenStrengthsMpa: ["20.0", "21.0", "19.0"] }); // fails vs characteristicStrengthMpa 35
 
     const customerId = await createCustomer();
-    const salesOrderId = await createConfirmedSalesOrder(customerId, "5");
+    const { salesOrderId, salesOrderLineId } = await createConfirmedSalesOrder(customerId, "5");
     const deliveryRes = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
       .send({
         branchId,
         salesOrderId,
+        salesOrderLineId,
         productionOrderId,
         batchRecordId: batchId,
         quantityM3: "5",
@@ -414,12 +441,12 @@ describe("QC flag propagation onto deliveries (DOMAIN.md Invariant 6)", () => {
 describe("dispatch schedule", () => {
   it("returns planned-vs-actual timings for a branch/date range, with customer name", async () => {
     const customerId = await createCustomer();
-    const salesOrderId = await createConfirmedSalesOrder(customerId, "5");
+    const { salesOrderId, salesOrderLineId } = await createConfirmedSalesOrder(customerId, "5");
     const scheduledAt = "2026-03-01T09:00:00.000Z";
     const created = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, salesOrderId, quantityM3: "5", scheduledAt });
+      .send({ branchId, salesOrderId, salesOrderLineId, quantityM3: "5", scheduledAt });
 
     const res = await request(app)
       .get(`/api/dispatch/schedule?branchId=${branchId}&from=2026-03-01T00:00:00.000Z&to=2026-03-01T23:59:59.000Z`)
@@ -429,6 +456,15 @@ describe("dispatch schedule", () => {
     expect(item).toBeTruthy();
     expect(item.status).toBe("planned");
     expect(typeof item.customerName).toBe("string");
+    expect(item.productName).toBe("C35");
+
+    const listRes = await request(app).get(`/api/delivery-orders?branchId=${branchId}`).set("Authorization", `Bearer ${admin}`);
+    const listed = listRes.body.items.find((d: { id: string }) => d.id === created.body.id);
+    expect(listed.customerName).toBe(res.body.items.find((i: { id: string }) => i.id === created.body.id).customerName);
+    expect(listed.productName).toBe("C35");
+
+    const detailRes = await request(app).get(`/api/delivery-orders/${created.body.id}`).set("Authorization", `Bearer ${admin}`);
+    expect(detailRes.body.productName).toBe("C35");
   });
 });
 
@@ -464,11 +500,11 @@ describe("yield variance closes with real delivered m3 (Phase 3 forward referenc
     expect(beforeDelivery.body.deliveryVarianceM3).toBeNull();
 
     const customerId = await createCustomer();
-    const salesOrderId = await createConfirmedSalesOrder(customerId, "10");
+    const { salesOrderId, salesOrderLineId } = await createConfirmedSalesOrder(customerId, "10");
     const deliveryRes = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, salesOrderId, productionOrderId, quantityM3: "10", scheduledAt: "2026-01-15T08:00:00.000Z" });
+      .send({ branchId, salesOrderId, salesOrderLineId, productionOrderId, quantityM3: "10", scheduledAt: "2026-01-15T08:00:00.000Z" });
     const { truckId, driverId } = await createTruckAndDriver();
     await request(app)
       .post(`/api/delivery-orders/${deliveryRes.body.id}/dispatch`)
@@ -485,5 +521,106 @@ describe("yield variance closes with real delivered m3 (Phase 3 forward referenc
     expect(afterDelivery.body.netProducedM3).toBe("10.000");
     // netProduced (10.000) - delivered (9.750) = 0.250
     expect(afterDelivery.body.deliveryVarianceM3).toBe("0.250");
+  });
+});
+
+describe("delivery orders — reconcile-sales-order-line backfill (audited repair path)", () => {
+  /** Directly nulls out salesOrderLineId via the DB, simulating a delivery order created before that field was required. */
+  async function nullOutLine(deliveryOrderId: string): Promise<void> {
+    await withTenant(db, config.companyId, (tx) =>
+      tx.update(deliveryOrder).set({ salesOrderLineId: null }).where(eq(deliveryOrder.id, deliveryOrderId)),
+    );
+  }
+
+  it("dry-run backfills a delivery whose sales order has exactly one line, without writing", async () => {
+    const customerId = await createCustomer();
+    const { salesOrderId, salesOrderLineId } = await createConfirmedSalesOrder(customerId, "5");
+    const created = await request(app)
+      .post("/api/delivery-orders")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, salesOrderId, salesOrderLineId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
+    await nullOutLine(created.body.id);
+
+    const res = await request(app)
+      .post("/api/delivery-orders/reconcile-sales-order-line")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ dryRun: true });
+    expect(res.status).toBe(200);
+    expect(res.body.dryRun).toBe(true);
+    const match = res.body.backfilled.find((b: { deliveryOrderId: string }) => b.deliveryOrderId === created.body.id);
+    expect(match).toBeTruthy();
+    expect(match.salesOrderLineId).toBe(salesOrderLineId);
+
+    const after = await request(app).get(`/api/delivery-orders/${created.body.id}`).set("Authorization", `Bearer ${admin}`);
+    expect(after.body.salesOrderLineId).toBeNull(); // dry run must not have written anything
+  });
+
+  it("applies the backfill, writes an audit row, and leaves ambiguous orders (0 or many lines) for review", async () => {
+    const customerId = await createCustomer();
+
+    // Unambiguous: exactly one line.
+    const { salesOrderId: oneLineOrderId, salesOrderLineId: onlyLineId } = await createConfirmedSalesOrder(customerId, "5");
+    const unambiguous = await request(app)
+      .post("/api/delivery-orders")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, salesOrderId: oneLineOrderId, salesOrderLineId: onlyLineId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
+    await nullOutLine(unambiguous.body.id);
+
+    // Ambiguous: two lines on the same order.
+    const multiOrderRes = await request(app).post("/api/sales-orders").set("Authorization", `Bearer ${admin}`).send({ customerId, branchId });
+    const multiLine1 = await request(app)
+      .post(`/api/sales-orders/${multiOrderRes.body.id}/lines`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ productId, quantityM3: "3" });
+    await request(app)
+      .post(`/api/sales-orders/${multiOrderRes.body.id}/lines`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ productId, quantityM3: "3" });
+    await request(app).post(`/api/sales-orders/${multiOrderRes.body.id}/confirm`).set("Authorization", `Bearer ${admin}`);
+    const ambiguous = await request(app)
+      .post("/api/delivery-orders")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({
+        branchId,
+        salesOrderId: multiOrderRes.body.id,
+        salesOrderLineId: multiLine1.body.lines[0].id,
+        quantityM3: "3",
+        scheduledAt: "2026-01-15T08:00:00.000Z",
+      });
+    await nullOutLine(ambiguous.body.id);
+
+    const res = await request(app)
+      .post("/api/delivery-orders/reconcile-sales-order-line")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ dryRun: false });
+    expect(res.status).toBe(200);
+    expect(res.body.dryRun).toBe(false);
+    expect(res.body.backfilled.some((b: { deliveryOrderId: string }) => b.deliveryOrderId === unambiguous.body.id)).toBe(true);
+    const reviewEntry = res.body.needsReview.find((r: { deliveryOrderId: string }) => r.deliveryOrderId === ambiguous.body.id);
+    expect(reviewEntry).toBeTruthy();
+    expect(reviewEntry.candidateLineCount).toBe(2);
+
+    const unambiguousAfter = await request(app).get(`/api/delivery-orders/${unambiguous.body.id}`).set("Authorization", `Bearer ${admin}`);
+    expect(unambiguousAfter.body.salesOrderLineId).toBe(onlyLineId);
+    const ambiguousAfter = await request(app).get(`/api/delivery-orders/${ambiguous.body.id}`).set("Authorization", `Bearer ${admin}`);
+    expect(ambiguousAfter.body.salesOrderLineId).toBeNull(); // left untouched, not guessed at
+
+    const audited = await withTenant(db, config.companyId, (tx) =>
+      tx
+        .select()
+        .from(auditLog)
+        .where(and(eq(auditLog.entityType, "delivery_order"), eq(auditLog.entityId, unambiguous.body.id), eq(auditLog.action, "backfill:sales_order_line"))),
+    );
+    expect(audited.length).toBe(1);
+    expect(audited[0]?.reason).toMatch(/reconcile-sales-order-line/);
+  });
+
+  it("requires the approve permission, not just create/edit", async () => {
+    const noPerm = await noPermissionsToken();
+    const res = await request(app)
+      .post("/api/delivery-orders/reconcile-sales-order-line")
+      .set("Authorization", `Bearer ${noPerm}`)
+      .send({ dryRun: true });
+    expect(res.status).toBe(403);
   });
 });

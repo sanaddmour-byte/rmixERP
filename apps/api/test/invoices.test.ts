@@ -1,6 +1,10 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
+import { eq } from "drizzle-orm";
+import { deliveryOrder, withTenant } from "@rmixerp/db";
 import { createApp } from "../src/app";
+import { db } from "../src/db";
+import { config } from "../src/config";
 import { adminToken } from "./testAuth";
 
 const app = createApp();
@@ -144,7 +148,7 @@ describe("invoice generation — combined mode", () => {
     expect(res.status).toBe(400);
   });
 
-  it("400s generating an invoice when the delivery order has no sales-order-line reference", async () => {
+  it("400s creating a delivery order with no salesOrderLineId — it's required so invoicing can never dead-end", async () => {
     const customerId = await createCustomer();
     const orderRes = await request(app).post("/api/sales-orders").set("Authorization", `Bearer ${admin}`).send({ customerId, branchId });
     await request(app)
@@ -152,30 +156,48 @@ describe("invoice generation — combined mode", () => {
       .set("Authorization", `Bearer ${admin}`)
       .send({ productId, quantityM3: "5" });
     await request(app).post(`/api/sales-orders/${orderRes.body.id}/confirm`).set("Authorization", `Bearer ${admin}`);
-    // No salesOrderLineId supplied.
-    const deliveryRes = await request(app)
+
+    const res = await request(app)
       .post("/api/delivery-orders")
       .set("Authorization", `Bearer ${admin}`)
       .send({ branchId, salesOrderId: orderRes.body.id, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
-    const truck = await request(app)
-      .post("/api/trucks")
-      .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, plateNumber: `IVTRK2-${Date.now()}` });
-    const driver = await request(app)
-      .post("/api/drivers")
-      .set("Authorization", `Bearer ${admin}`)
-      .send({ branchId, name: `Invoice Test Driver 2 ${Date.now()}` });
+    expect(res.status).toBe(400);
+  });
+
+  it("400s creating a delivery order whose salesOrderLineId belongs to a different sales order", async () => {
+    const customerId = await createCustomer();
+    const orderRes = await request(app).post("/api/sales-orders").set("Authorization", `Bearer ${admin}`).send({ customerId, branchId });
     await request(app)
-      .post(`/api/delivery-orders/${deliveryRes.body.id}/dispatch`)
+      .post(`/api/sales-orders/${orderRes.body.id}/lines`)
       .set("Authorization", `Bearer ${admin}`)
-      .send({ truckId: truck.body.id, driverId: driver.body.id });
-    await request(app)
-      .post(`/api/delivery-orders/${deliveryRes.body.id}/deliver`)
+      .send({ productId, quantityM3: "5" });
+    await request(app).post(`/api/sales-orders/${orderRes.body.id}/confirm`).set("Authorization", `Bearer ${admin}`);
+
+    const otherOrderRes = await request(app).post("/api/sales-orders").set("Authorization", `Bearer ${admin}`).send({ customerId, branchId });
+    const otherLineRes = await request(app)
+      .post(`/api/sales-orders/${otherOrderRes.body.id}/lines`)
       .set("Authorization", `Bearer ${admin}`)
-      .send({ receivedQuantityM3: "5", signedByName: "X", signatureData: "data:image/png;base64,AAAA" });
+      .send({ productId, quantityM3: "5" });
+    const wrongLineId = otherLineRes.body.lines[0].id as string;
 
     const res = await request(app)
-      .post(`/api/delivery-orders/${deliveryRes.body.id}/invoice`)
+      .post("/api/delivery-orders")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, salesOrderId: orderRes.body.id, salesOrderLineId: wrongLineId, quantityM3: "5", scheduledAt: "2026-01-15T08:00:00.000Z" });
+    expect(res.status).toBe(400);
+  });
+
+  it("400s generating an invoice for a legacy delivery order with a null sales-order-line reference", async () => {
+    // Simulates data created before salesOrderLineId was required — the
+    // invoice route's own guard is defense-in-depth for exactly these
+    // pre-existing rows, independent of creation-time validation.
+    const { deliveryOrderId } = await setupDeliveredDeliveryOrder("5");
+    await withTenant(db, config.companyId, (tx) =>
+      tx.update(deliveryOrder).set({ salesOrderLineId: null }).where(eq(deliveryOrder.id, deliveryOrderId)),
+    );
+
+    const res = await request(app)
+      .post(`/api/delivery-orders/${deliveryOrderId}/invoice`)
       .set("Authorization", `Bearer ${admin}`)
       .send({ mode: "combined" });
     expect(res.status).toBe(400);

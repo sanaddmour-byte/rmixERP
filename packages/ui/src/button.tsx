@@ -11,7 +11,11 @@ export const buttonVariants = cva(
         outline:
           "border border-navy-300 bg-white hover:bg-navy-50 focus-visible:ring-navy-400 dark:border-navy-700 dark:bg-navy-900 dark:text-navy-100 dark:hover:bg-navy-800",
         ghost: "hover:bg-navy-50 focus-visible:ring-navy-400 dark:text-navy-100 dark:hover:bg-navy-800",
-        accent: "bg-orange-500 text-white hover:bg-orange-600 focus-visible:ring-orange-500",
+        // orange-700, not the brighter 500/600 — white text on either of
+        // those falls short of WCAG's 4.5:1 for normal text (measured
+        // ~3.1:1 / ~4.1:1); 700 clears it (~5.9:1). Reserved for the one
+        // primary action on a screen, never a secondary/override button.
+        accent: "bg-orange-700 text-white hover:bg-orange-800 focus-visible:ring-orange-700",
       },
       size: {
         default: "h-10 px-4 py-2",
