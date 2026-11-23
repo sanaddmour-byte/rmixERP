@@ -10,9 +10,18 @@ import {
   withTenant,
   type Tx,
 } from "@rmixerp/db";
-import { assertInvoiceTransition, computeRetryDelayMs, type ClearanceOutcome, type ClearanceProvider } from "@rmixerp/core";
+import {
+  assertInvoiceTransition,
+  computeRetryDelayMs,
+  fils,
+  WELL_KNOWN_ACCOUNT_CODES,
+  ZERO_FILS,
+  type ClearanceOutcome,
+  type ClearanceProvider,
+} from "@rmixerp/core";
 import { db } from "../db";
 import { writeAudit } from "../audit";
+import { findWellKnownAccount, postJournalEntry } from "../lib/glPosting";
 import { buildUblInvoiceXml } from "./ubl";
 import { toUblInvoiceInput } from "./jofotara/mapping";
 
@@ -263,6 +272,43 @@ async function submitNoteForClearance(
           clearanceNextRetryAt: null,
         })
         .where(eq(table.id, noteId));
+
+      // A note has no independent lifecycle beyond clearance (unlike an
+      // invoice's separate cleared->issued step) — clearing IS the moment
+      // it becomes a real adjustment to what the customer owes, so this
+      // is where it posts. A credit note reverses revenue/tax and reduces
+      // the receivable; a debit note mirrors an invoice.
+      const arAccountId = await findWellKnownAccount(tx, companyId, WELL_KNOWN_ACCOUNT_CODES.accountsReceivable);
+      const revenueAccountId = await findWellKnownAccount(tx, companyId, WELL_KNOWN_ACCOUNT_CODES.revenue);
+      const taxOutputAccountId = await findWellKnownAccount(tx, companyId, WELL_KNOWN_ACCOUNT_CODES.taxOutput);
+      const amountFils = fils(before.amountFils);
+      const taxFils = fils(before.taxFils);
+      const totalFils = fils(before.totalFils);
+      const hasTax = taxFils > ZERO_FILS;
+      // A credit note reverses revenue/tax recognition and reduces the
+      // receivable (mirror image of a debit note, which mirrors an invoice).
+      const journalLines =
+        documentType === "credit_note"
+          ? [
+              { accountId: revenueAccountId, debitFils: amountFils, creditFils: ZERO_FILS },
+              ...(hasTax ? [{ accountId: taxOutputAccountId, debitFils: taxFils, creditFils: ZERO_FILS }] : []),
+              { accountId: arAccountId, debitFils: ZERO_FILS, creditFils: totalFils },
+            ]
+          : [
+              { accountId: arAccountId, debitFils: totalFils, creditFils: ZERO_FILS },
+              { accountId: revenueAccountId, debitFils: ZERO_FILS, creditFils: amountFils },
+              ...(hasTax ? [{ accountId: taxOutputAccountId, debitFils: ZERO_FILS, creditFils: taxFils }] : []),
+            ];
+      await postJournalEntry(
+        tx,
+        companyId,
+        before.branchId,
+        new Date(),
+        `${documentType === "credit_note" ? "Credit" : "Debit"} note ${before.noteNumber} cleared`,
+        documentType,
+        noteId,
+        journalLines,
+      );
     } else if (outcome.kind === "rejected") {
       await tx
         .update(table)

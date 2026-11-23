@@ -73,7 +73,14 @@ export const journalEntry = pgTable(
     sourceDocumentId: uuid("source_document_id").notNull(),
     ...auditColumns(),
   },
-  () => [tenantIsolationPolicy()],
+  (t) => [
+    tenantIsolationPolicy(),
+    // One posting per source document, enforced by the database rather
+    // than application logic alone (CLAUDE.md's usual "not application
+    // logic alone" pattern for an important invariant) — the retry-safety
+    // half of apps/api/src/lib/glPosting.ts's postJournalEntry.
+    unique("journal_entry_company_source_document_unique").on(t.companyId, t.sourceDocumentType, t.sourceDocumentId),
+  ],
 ).enableRLS();
 
 export type JournalEntry = typeof journalEntry.$inferSelect;

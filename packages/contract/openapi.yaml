@@ -5974,7 +5974,7 @@ components:
       required: [date, type, documentNumber, debitJod, creditJod, runningBalanceJod]
       properties:
         date: { type: string, format: date-time }
-        type: { type: string, enum: [invoice, collection] }
+        type: { type: string, enum: [invoice, collection, credit_note, debit_note] }
         documentNumber: { type: string }
         debitJod: { type: string }
         creditJod: { type: string }
