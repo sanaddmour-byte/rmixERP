@@ -2,6 +2,7 @@ import * as React from "react";
 import { Button, Card, CardContent, CardHeader, CardTitle, ConfirmDialog, Input, TableSkeleton } from "@rmixerp/ui";
 import { useLanguage } from "../i18n/LanguageContext";
 import { throwIfApiError } from "../lib/apiResult";
+import { downloadAuthenticatedCsv } from "../lib/downloadCsv";
 
 export interface Column<T> {
   key: keyof T;
@@ -202,11 +203,13 @@ export function ResourceListPage<T extends { id: string }>({
         <CardTitle>{title}</CardTitle>
         <div className="flex gap-2">
           {csvUrl && (
-            <a href={csvUrl} download>
-              <Button variant="outline" size="sm">
-                {t.resource.exportCsv}
-              </Button>
-            </a>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void downloadAuthenticatedCsv(csvUrl, `${title.toLowerCase().replace(/\s+/g, "-")}.csv`)}
+            >
+              {t.resource.exportCsv}
+            </Button>
           )}
           {permissions.create && (
             <Button variant="accent" size="sm" onClick={() => setShowCreate(true)}>

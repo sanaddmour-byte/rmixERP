@@ -9,6 +9,7 @@ import {
 } from "@rmixerp/contract";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@rmixerp/ui";
 import { useModulePermissions } from "../lib/usePermissions";
+import { downloadAuthenticatedCsv } from "../lib/downloadCsv";
 import { StatusBadge, type BadgeTone } from "../components/StatusBadge";
 
 function utilizationTone(basisPoints: number): BadgeTone {
@@ -86,11 +87,9 @@ function AgingReportSection() {
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>Aging Report</CardTitle>
-        <a href="/api/reports/aging?format=csv" download>
-          <Button size="sm" variant="outline">
-            Export CSV
-          </Button>
-        </a>
+        <Button size="sm" variant="outline" onClick={() => void downloadAuthenticatedCsv("/api/reports/aging?format=csv", "aging-report.csv")}>
+          Export CSV
+        </Button>
       </CardHeader>
       <CardContent>
         <table className="w-full text-sm">
@@ -187,11 +186,13 @@ function CreditOverridesSection() {
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>Credit Overrides Report</CardTitle>
-        <a href="/api/reports/credit-overrides?format=csv" download>
-          <Button size="sm" variant="outline">
-            Export CSV
-          </Button>
-        </a>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => void downloadAuthenticatedCsv("/api/reports/credit-overrides?format=csv", "credit-overrides.csv")}
+        >
+          Export CSV
+        </Button>
       </CardHeader>
       <CardContent className="space-y-4">
         <table className="w-full text-sm">

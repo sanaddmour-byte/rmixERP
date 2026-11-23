@@ -12,9 +12,12 @@ import {
   useSubmitInvoiceForClearance,
   type Invoice,
 } from "@rmixerp/contract";
-import { Button, Card, CardContent, CardHeader, CardTitle, Code, Input } from "@rmixerp/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, Code, Input, TableSkeleton } from "@rmixerp/ui";
 import { refetchOnSuccess } from "../lib/refetchOnSuccess";
 import { useModulePermissions } from "../lib/usePermissions";
+import { StatusBadge } from "../components/StatusBadge";
+import { ClickableRow } from "../components/ClickableRow";
+import { CLEARANCE_STATUS_TONE, INVOICE_STATUS_TONE } from "../lib/statusRegistry";
 
 type InvoiceStatus = Invoice["status"];
 
@@ -98,7 +101,7 @@ function GenerateInvoicePanel({ onGenerated }: { onGenerated: (invoiceId: string
   );
 }
 
-function InvoiceDetailPanel({ id, onSelect }: { id: string; onSelect: (id: string) => void }) {
+function InvoiceDetailPanel({ id, onSelect, onClose }: { id: string; onSelect: (id: string) => void; onClose: () => void }) {
   const permissions = useModulePermissions("invoices");
   const clearancePermissions = useModulePermissions("clearance");
   const detail = useGetInvoice(id);
@@ -120,22 +123,27 @@ function InvoiceDetailPanel({ id, onSelect }: { id: string; onSelect: (id: strin
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>
-          Invoice <Code>{inv.invoiceNumber}</Code> — <span className="capitalize">{inv.status.replace(/_/g, " ")}</span>
+          Invoice <Code>{inv.invoiceNumber}</Code> — <StatusBadge label={inv.status} tone={INVOICE_STATUS_TONE[inv.status] ?? "gray"} />
         </CardTitle>
-        {clearancePermissions.create && (
-          <div className="flex gap-2">
-            {(inv.status === "draft" || inv.clearanceStatus === "retrying") && (
-              <Button size="sm" disabled={submitForClearance.isPending} onClick={() => submitForClearance.mutate({ id })}>
-                {inv.clearanceStatus === "retrying" ? "Retry Clearance" : "Submit for Clearance"}
-              </Button>
-            )}
-            {inv.status === "cleared" && (
-              <Button size="sm" disabled={issue.isPending} onClick={() => issue.mutate({ id })}>
-                Issue
-              </Button>
-            )}
-          </div>
-        )}
+        <div className="flex gap-2">
+          {clearancePermissions.create && (
+            <>
+              {(inv.status === "draft" || inv.clearanceStatus === "retrying") && (
+                <Button size="sm" disabled={submitForClearance.isPending} onClick={() => submitForClearance.mutate({ id })}>
+                  {inv.clearanceStatus === "retrying" ? "Retry Clearance" : "Submit for Clearance"}
+                </Button>
+              )}
+              {inv.status === "cleared" && (
+                <Button size="sm" disabled={issue.isPending} onClick={() => issue.mutate({ id })}>
+                  Issue
+                </Button>
+              )}
+            </>
+          )}
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Close
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
         {inv.relatedInvoiceId && (
@@ -150,8 +158,10 @@ function InvoiceDetailPanel({ id, onSelect }: { id: string; onSelect: (id: strin
             </button>
           </p>
         )}
-        <div className="rounded-md border border-navy-200 bg-navy-50 dark:border-navy-700 dark:bg-navy-800 p-3 text-xs text-navy-600 dark:text-navy-300">
-          <span className="font-semibold capitalize">Clearance: {inv.clearanceStatus.replace(/_/g, " ")}</span>
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-navy-200 bg-navy-50 dark:border-navy-700 dark:bg-navy-800 p-3 text-xs text-navy-600 dark:text-navy-300">
+          <span className="flex items-center gap-1.5 font-semibold">
+            Clearance: <StatusBadge label={inv.clearanceStatus} tone={CLEARANCE_STATUS_TONE[inv.clearanceStatus] ?? "gray"} />
+          </span>
           {inv.clearanceIcv !== null && <span className="ms-3">ICV {inv.clearanceIcv}</span>}
           {inv.clearanceQrPayload && <span className="ms-3">QR: {inv.clearanceQrPayload}</span>}
           {inv.clearanceError && <span className="ms-3 text-orange-700">{inv.clearanceError}</span>}
@@ -244,11 +254,27 @@ function InvoiceDetailPanel({ id, onSelect }: { id: string; onSelect: (id: strin
 }
 
 export function InvoicesPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = React.useState(1);
   const [status, setStatus] = React.useState<InvoiceStatus | "">("");
-  const [selectedId, setSelectedId] = React.useState<string | null>(() => searchParams.get("id"));
+  const [selectedId, setSelectedIdState] = React.useState<string | null>(() => searchParams.get("id"));
   const [customerFilterId] = React.useState(() => searchParams.get("customerId") ?? "");
+
+  // Keeps the open record in the URL — survives a refresh, and the
+  // browser back button closes it — without touching the status/customer
+  // filters already on the page.
+  function setSelectedId(id: string | null) {
+    setSelectedIdState(id);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (id) next.set("id", id);
+        else next.delete("id");
+        return next;
+      },
+      { replace: true },
+    );
+  }
 
   const customers = useListCustomers({ page: 1, pageSize: 100 });
   const customerOptions =
@@ -315,25 +341,20 @@ export function InvoicesPage() {
               </tr>
             </thead>
             <tbody>
-              {list.isLoading && (
-                <tr>
-                  <td colSpan={6} className="py-4 text-center text-navy-400 dark:text-navy-500">
-                    Loading…
-                  </td>
-                </tr>
-              )}
+              {list.isLoading && <TableSkeleton columns={6} />}
               {!list.isLoading && (body?.items.length ?? 0) === 0 && (
                 <tr>
                   <td colSpan={6} className="py-4 text-center text-navy-400 dark:text-navy-500">
-                    No records yet.
+                    No invoices match these filters.
                   </td>
                 </tr>
               )}
               {body?.items.map((row) => (
-                <tr
+                <ClickableRow
                   key={row.id}
-                  className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800"
                   onClick={() => setSelectedId(row.id)}
+                  className="border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800"
+                  aria-label={`Invoice ${row.invoiceNumber}, ${row.status}`}
                 >
                   <td className="py-2 pe-4">
                     <Code>{row.invoiceNumber}</Code>
@@ -347,11 +368,15 @@ export function InvoicesPage() {
                       {customerById.get(row.customerId) ?? row.customerId}
                     </Link>
                   </td>
-                  <td className="py-2 pe-4 capitalize">{row.status.replace(/_/g, " ")}</td>
-                  <td className="py-2 pe-4 capitalize">{row.clearanceStatus.replace(/_/g, " ")}</td>
+                  <td className="py-2 pe-4">
+                    <StatusBadge label={row.status} tone={INVOICE_STATUS_TONE[row.status] ?? "gray"} />
+                  </td>
+                  <td className="py-2 pe-4">
+                    <StatusBadge label={row.clearanceStatus} tone={CLEARANCE_STATUS_TONE[row.clearanceStatus] ?? "gray"} />
+                  </td>
                   <td className="py-2 pe-4">{row.totalJod}</td>
                   <td className="py-2 pe-4">{new Date(row.invoicedAt).toLocaleDateString()}</td>
-                </tr>
+                </ClickableRow>
               ))}
             </tbody>
           </table>
@@ -371,7 +396,7 @@ export function InvoicesPage() {
         </CardContent>
       </Card>
 
-      {selectedId && <InvoiceDetailPanel id={selectedId} onSelect={setSelectedId} />}
+      {selectedId && <InvoiceDetailPanel id={selectedId} onSelect={setSelectedId} onClose={() => setSelectedId(null)} />}
     </div>
   );
 }

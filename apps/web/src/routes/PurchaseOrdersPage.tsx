@@ -14,15 +14,17 @@ import {
   useSubmitPurchaseOrder,
   type PurchaseOrder,
 } from "@rmixerp/contract";
-import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@rmixerp/ui";
+import { Button, Card, CardContent, CardHeader, CardTitle, Input, TableSkeleton } from "@rmixerp/ui";
 import { refetchOnSuccess } from "../lib/refetchOnSuccess";
 import { useModulePermissions } from "../lib/usePermissions";
+import { throwIfApiError } from "../lib/apiResult";
 import { StatusBadge } from "../components/StatusBadge";
+import { ClickableRow } from "../components/ClickableRow";
 import { PURCHASE_ORDER_STATUS_TONE } from "../lib/statusRegistry";
 
 type Status = PurchaseOrder["status"];
 
-function PurchaseOrderDetailPanel({ id }: { id: string }) {
+function PurchaseOrderDetailPanel({ id, onClose }: { id: string; onClose: () => void }) {
   const detail = useGetPurchaseOrder(id);
   const permissions = useModulePermissions("purchaseOrders");
   const rawMaterials = useListRawMaterials({ page: 1, pageSize: 100 });
@@ -38,17 +40,26 @@ function PurchaseOrderDetailPanel({ id }: { id: string }) {
   const [quantity, setQuantity] = React.useState("");
   const [unitPriceJod, setUnitPriceJod] = React.useState("");
   const [reason, setReason] = React.useState("");
+  const [lineError, setLineError] = React.useState<string | null>(null);
 
   const o = detail.data?.status === 200 ? detail.data.data : undefined;
   if (detail.isLoading) return <p className="text-navy-500">Loading…</p>;
   if (!o) return <p className="text-navy-500">Not found.</p>;
 
-  function handleAddLine(e: React.FormEvent) {
+  async function handleAddLine(e: React.FormEvent) {
     e.preventDefault();
-    createLine.mutate({ id, data: { rawMaterialId, quantity, unitPriceJod } });
-    setRawMaterialId("");
-    setQuantity("");
-    setUnitPriceJod("");
+    setLineError(null);
+    try {
+      const result = await createLine.mutateAsync({ id, data: { rawMaterialId, quantity, unitPriceJod } });
+      throwIfApiError(result);
+      // Only clear the form once the line is actually saved — on failure
+      // the fields (and whatever the user typed) stay exactly as they were.
+      setRawMaterialId("");
+      setQuantity("");
+      setUnitPriceJod("");
+    } catch (err) {
+      setLineError(err instanceof Error ? err.message : "Could not add this line — please check the fields and try again.");
+    }
   }
 
   return (
@@ -64,6 +75,9 @@ function PurchaseOrderDetailPanel({ id }: { id: string }) {
           <Link href={`/vendor-bills?purchaseOrderId=${id}`} className="text-orange-600 hover:underline dark:text-orange-400">
             Vendor Bills →
           </Link>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            Close
+          </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -106,6 +120,7 @@ function PurchaseOrderDetailPanel({ id }: { id: string }) {
               <th className="py-2 pe-4 font-medium">Total</th>
               <th className="py-2 pe-4 font-medium">Received</th>
               <th className="py-2 pe-4 font-medium">Variance</th>
+              <th className="py-2 pe-4 font-medium">Billed</th>
             </tr>
           </thead>
           <tbody>
@@ -119,6 +134,7 @@ function PurchaseOrderDetailPanel({ id }: { id: string }) {
                 <td className={`py-2 pe-4 ${Number(line.varianceQuantity) < 0 ? "text-yellow-700" : Number(line.varianceQuantity) > 0 ? "text-red-700" : ""}`}>
                   {line.varianceQuantity}
                 </td>
+                <td className="py-2 pe-4">{line.billedQuantity}</td>
               </tr>
             ))}
           </tbody>
@@ -155,6 +171,11 @@ function PurchaseOrderDetailPanel({ id }: { id: string }) {
             <Button type="submit" size="sm" disabled={createLine.isPending}>
               Add line
             </Button>
+            {lineError && (
+              <p role="alert" className="w-full text-sm text-danger">
+                {lineError}
+              </p>
+            )}
           </form>
         )}
       </CardContent>
@@ -163,12 +184,28 @@ function PurchaseOrderDetailPanel({ id }: { id: string }) {
 }
 
 export function PurchaseOrdersPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [page, setPage] = React.useState(1);
   const [status, setStatus] = React.useState<Status | "">("");
-  const [selectedId, setSelectedId] = React.useState<string | null>(() => searchParams.get("id"));
+  const [selectedId, setSelectedIdState] = React.useState<string | null>(() => searchParams.get("id"));
   const [purchaseRequestId] = React.useState(() => searchParams.get("purchaseRequestId") ?? "");
   const permissions = useModulePermissions("purchaseOrders");
+
+  // Keeps the open record in the URL — survives a refresh, and the
+  // browser back button closes it — without touching the status filter
+  // already on the page.
+  function setSelectedId(id: string | null) {
+    setSelectedIdState(id);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (id) next.set("id", id);
+        else next.delete("id");
+        return next;
+      },
+      { replace: true },
+    );
+  }
 
   const branches = useListBranches({ page: 1, pageSize: 100 });
   const branchOptions = branches.data?.status === 200 && typeof branches.data.data !== "string" ? branches.data.data.items : [];
@@ -177,6 +214,7 @@ export function PurchaseOrdersPage() {
 
   const [branchId, setBranchId] = React.useState("");
   const [vendorId, setVendorId] = React.useState("");
+  const [createError, setCreateError] = React.useState<string | null>(null);
 
   const list = useListPurchaseOrders({ page, pageSize: 20, ...(status && { status }) });
   const create = useCreatePurchaseOrder(refetchOnSuccess(list));
@@ -184,14 +222,20 @@ export function PurchaseOrdersPage() {
   const body = list.data?.status === 200 ? list.data.data : undefined;
   const totalPages = Math.max(1, Math.ceil((body?.total ?? 0) / 20));
 
-  function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    create.mutate(
-      { data: { branchId, vendorId, ...(purchaseRequestId && { purchaseRequestId }) } },
-      { onSuccess: (result) => result.status === 201 && setSelectedId(result.data.id) },
-    );
-    setBranchId("");
-    setVendorId("");
+    setCreateError(null);
+    try {
+      const result = await create.mutateAsync({ data: { branchId, vendorId, ...(purchaseRequestId && { purchaseRequestId }) } });
+      throwIfApiError(result);
+      if (result.status === 201) {
+        setBranchId("");
+        setVendorId("");
+        setSelectedId(result.data.id);
+      }
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Could not create this purchase order — please check the fields and try again.");
+    }
   }
 
   return (
@@ -242,6 +286,11 @@ export function PurchaseOrdersPage() {
               <Button type="submit" disabled={create.isPending}>
                 Create
               </Button>
+              {createError && (
+                <p role="alert" className="w-full text-sm text-danger">
+                  {createError}
+                </p>
+              )}
             </form>
           </CardContent>
         </Card>
@@ -279,18 +328,20 @@ export function PurchaseOrdersPage() {
               </tr>
             </thead>
             <tbody>
+              {list.isLoading && <TableSkeleton columns={4} />}
               {!list.isLoading && (body?.items.length ?? 0) === 0 && (
                 <tr>
                   <td colSpan={4} className="py-4 text-center text-navy-400 dark:text-navy-500">
-                    No records yet.
+                    No purchase orders match these filters.
                   </td>
                 </tr>
               )}
               {body?.items.map((row) => (
-                <tr
+                <ClickableRow
                   key={row.id}
-                  className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800"
                   onClick={() => setSelectedId(row.id)}
+                  className="border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800"
+                  aria-label={`Purchase order ${row.poNumber}, ${row.status}`}
                 >
                   <td className="py-2 pe-4">{row.poNumber}</td>
                   <td className="py-2 pe-4">
@@ -298,7 +349,7 @@ export function PurchaseOrdersPage() {
                   </td>
                   <td className="py-2 pe-4">{vendorOptions.find((v) => v.id === row.vendorId)?.name ?? row.vendorId}</td>
                   <td className="py-2 pe-4">{row.totalJod}</td>
-                </tr>
+                </ClickableRow>
               ))}
             </tbody>
           </table>
@@ -318,7 +369,7 @@ export function PurchaseOrdersPage() {
         </CardContent>
       </Card>
 
-      {selectedId && <PurchaseOrderDetailPanel id={selectedId} />}
+      {selectedId && <PurchaseOrderDetailPanel id={selectedId} onClose={() => setSelectedId(null)} />}
     </div>
   );
 }

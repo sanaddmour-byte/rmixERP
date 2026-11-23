@@ -56,6 +56,16 @@ export const DELIVERY_ORDER_STATUS_TONE: Record<string, BadgeTone> = {
   invoiced: "green",
 };
 
+export const INVOICE_STATUS_TONE: Record<string, BadgeTone> = {
+  draft: "gray",
+  pending_clearance: "yellow",
+  cleared: "yellow",
+  issued: "green",
+  partially_paid: "yellow",
+  paid: "green",
+  rejected: "red",
+};
+
 /** QC pass/fail/pending — not a document status enum, but the same tone-registry idea so QCPage doesn't hand-roll its own pill (see docs/ui-ux-audit.md §1.1's dark-mode contrast bug on that hand-rolled version). */
 export function qcResultTone(pass: boolean | null): BadgeTone {
   if (pass === null) return "gray";
