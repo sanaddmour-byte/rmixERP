@@ -17,6 +17,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@rmixer
 import { refetchOnSuccess } from "../lib/refetchOnSuccess";
 import { useModulePermissions } from "../lib/usePermissions";
 import { StatusBadge, type BadgeTone } from "../components/StatusBadge";
+import { ClickableRow } from "../components/ClickableRow";
 
 type Status = PurchaseRequest["status"];
 
@@ -249,17 +250,18 @@ export function PurchaseRequestsPage() {
                 </tr>
               )}
               {body?.items.map((row) => (
-                <tr
+                <ClickableRow
                   key={row.id}
-                  className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800"
-                  onClick={() => setSelectedId(row.id)}
+                  onActivate={() => setSelectedId(row.id)}
+                  aria-label={`Purchase request ${row.requestNumber}`}
+                  className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-orange-600"
                 >
                   <td className="py-2 pe-4">{row.requestNumber}</td>
                   <td className="py-2 pe-4">
                     <StatusBadge label={row.status} tone={STATUS_TONE[row.status]} />
                   </td>
                   <td className="py-2 pe-4">{row.neededByDate ? new Date(row.neededByDate).toLocaleDateString() : "—"}</td>
-                </tr>
+                </ClickableRow>
               ))}
             </tbody>
           </table>
