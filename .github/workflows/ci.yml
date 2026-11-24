@@ -76,6 +76,9 @@ jobs:
         env:
           MIGRATE_DATABASE_URL: postgres://postgres:ci_owner_password@localhost:5432/rmixerp_test
 
+      - name: Seed rmixerp
+        run: pnpm --filter @rmixerp/db seed
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -84,3 +87,12 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Build web
+        run: pnpm --filter @rmixerp/web build
+
+      - name: Install Playwright browser
+        run: pnpm --filter @rmixerp/web exec playwright install --with-deps chromium
+
+      - name: E2E test
+        run: pnpm --filter @rmixerp/web test:e2e

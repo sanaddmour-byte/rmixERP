@@ -13,3 +13,7 @@ coverage/
 apps/mobile/ios/
 apps/mobile/android/
 packages/contract/generated/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
