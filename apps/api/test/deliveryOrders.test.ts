@@ -176,6 +176,33 @@ describe("delivery orders — creation", () => {
   });
 });
 
+describe("delivery orders — list ordering", () => {
+  it("orders by scheduled time, not creation order — the next stop belongs at the top regardless of when it was entered", async () => {
+    const customerId = await createCustomer();
+    const { salesOrderId: laterOrderId, salesOrderLineId: laterLineId } = await createConfirmedSalesOrder(customerId, "5");
+    const { salesOrderId: earlierOrderId, salesOrderLineId: earlierLineId } = await createConfirmedSalesOrder(customerId, "5");
+
+    // Created in this order (later-scheduled first) specifically so a
+    // creation-order default would get this test's expectation backwards.
+    const laterRes = await request(app)
+      .post("/api/delivery-orders")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, salesOrderId: laterOrderId, salesOrderLineId: laterLineId, quantityM3: "5", scheduledAt: "2027-03-01T10:00:00.000Z" });
+    const earlierRes = await request(app)
+      .post("/api/delivery-orders")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ branchId, salesOrderId: earlierOrderId, salesOrderLineId: earlierLineId, quantityM3: "5", scheduledAt: "2027-03-01T06:00:00.000Z" });
+
+    const res = await request(app)
+      .get("/api/delivery-orders")
+      .query({ scheduledFrom: "2027-03-01T00:00:00.000Z", scheduledTo: "2027-03-02T00:00:00.000Z", pageSize: 100 })
+      .set("Authorization", `Bearer ${admin}`);
+    expect(res.status).toBe(200);
+    const ids = res.body.items.map((i: { id: string }) => i.id);
+    expect(ids.indexOf(earlierRes.body.id)).toBeLessThan(ids.indexOf(laterRes.body.id));
+  });
+});
+
 describe("delivery orders — dispatch and deliver lifecycle", () => {
   it("dispatches, then delivers with proof of delivery", async () => {
     const customerId = await createCustomer();

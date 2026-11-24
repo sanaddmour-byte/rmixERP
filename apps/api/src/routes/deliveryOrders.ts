@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { and, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import {
   company,
   customer,
@@ -185,7 +185,12 @@ deliveryOrdersRouter.get("/delivery-orders", requireAuth, requirePermission(MODU
       scheduledTo ? lte(deliveryOrder.scheduledAt, new Date(scheduledTo)) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(deliveryOrder).where(where).orderBy(desc(deliveryOrder.createdAt), deliveryOrder.id).limit(pagination.limit).offset(pagination.offset),
+      // Chronological by scheduled time, not creation order — a list of
+      // deliveries (the driver app's "My Deliveries", Dispatch's own
+      // queue table) is read as an operational queue: the next thing
+      // due is what belongs at the top, not whatever was most recently
+      // entered into the system (the review's "next stop easy to find").
+      tx.select().from(deliveryOrder).where(where).orderBy(deliveryOrder.scheduledAt, deliveryOrder.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(deliveryOrder).where(where),
     ]);
     const batchIds = rows.map((r) => r.batchRecordId).filter((id): id is string => id !== null);
