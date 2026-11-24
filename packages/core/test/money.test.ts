@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { InputParseError } from "../src/errors";
 import {
   addFils,
   allocateFilsEvenly,
@@ -23,12 +24,12 @@ describe("jodStringToFils / filsToJodString round-trip", () => {
     expect(filsToJodString(jodStringToFils(input))).toBe(expected);
   });
 
-  it("rejects more than 3 decimal places", () => {
-    expect(() => jodStringToFils("1.2345")).toThrow();
+  it("rejects more than 3 decimal places with an InputParseError, not a plain Error", () => {
+    expect(() => jodStringToFils("1.2345")).toThrow(InputParseError);
   });
 
-  it("rejects garbage input", () => {
-    expect(() => jodStringToFils("abc")).toThrow();
+  it("rejects garbage input with an InputParseError", () => {
+    expect(() => jodStringToFils("abc")).toThrow(InputParseError);
   });
 });
 

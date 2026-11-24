@@ -1,6 +1,8 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { pinoHttp } from "pino-http";
+import { InputParseError } from "@rmixerp/core";
 import { logger } from "./logger";
+import { validationError } from "./lib/errors";
 import { healthRouter } from "./routes/health";
 import { authRouter } from "./routes/auth";
 import { companyRouter } from "./routes/company";
@@ -78,6 +80,15 @@ export function createApp() {
   });
 
   app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
+    // A money/quantity string that only a Zod `.string()` check (not its
+    // decimal format) let through — an expected-shape validation failure,
+    // not a bug, so it gets the same 400 a caught Zod error would, not a
+    // 500 (the review's "malformed credit limit returns a 500" finding,
+    // which was one of many call sites across the app sharing this gap).
+    if (err instanceof InputParseError) {
+      res.status(400).json(validationError(err.message));
+      return;
+    }
     req.log?.error({ err }, "unhandled error");
     res.status(500).json({ error: { message: "Internal server error", code: "internal_error" } });
   });

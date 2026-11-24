@@ -161,6 +161,26 @@ describe("purchase orders", () => {
     expect(approveRes.body.status).toBe("approved");
   });
 
+  it("400s a malformed unitPriceJod on a new line instead of 500ing (the review's malformed-money-string finding, generalized beyond the one customers.ts instance)", async () => {
+    const poRes = await request(app).post("/api/purchase-orders").set("Authorization", `Bearer ${admin}`).send({ branchId, vendorId });
+    const res = await request(app)
+      .post(`/api/purchase-orders/${poRes.body.id}/lines`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ rawMaterialId, quantity: "10", unitPriceJod: "not-a-price" });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("validation_error");
+  });
+
+  it("400s a malformed quantity on a new line instead of 500ing", async () => {
+    const poRes = await request(app).post("/api/purchase-orders").set("Authorization", `Bearer ${admin}`).send({ branchId, vendorId });
+    const res = await request(app)
+      .post(`/api/purchase-orders/${poRes.body.id}/lines`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ rawMaterialId, quantity: "1.23456789", unitPriceJod: "5.000" });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("validation_error");
+  });
+
   it("rejects a submitted purchase order with a reason", async () => {
     const poRes = await request(app).post("/api/purchase-orders").set("Authorization", `Bearer ${admin}`).send({ branchId, vendorId });
     const poId = poRes.body.id;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { InputParseError } from "../src/errors";
 import { mulFilsRoundHalfUp, jodStringToFils, filsToJodString } from "../src/money";
 import { decimalStringToMilliUnits, milliUnitsToDecimalString } from "../src/quantity";
 
@@ -13,12 +14,12 @@ describe("decimalStringToMilliUnits / milliUnitsToDecimalString", () => {
     expect(milliUnitsToDecimalString(6500n)).toBe("6.500");
   });
 
-  it("rejects more than 3 decimal places", () => {
-    expect(() => decimalStringToMilliUnits("1.2345")).toThrow();
+  it("rejects more than 3 decimal places with an InputParseError, not a plain Error", () => {
+    expect(() => decimalStringToMilliUnits("1.2345")).toThrow(InputParseError);
   });
 
-  it("rejects garbage input", () => {
-    expect(() => decimalStringToMilliUnits("not-a-number")).toThrow();
+  it("rejects garbage input with an InputParseError", () => {
+    expect(() => decimalStringToMilliUnits("not-a-number")).toThrow(InputParseError);
   });
 });
 

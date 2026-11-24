@@ -7,9 +7,10 @@ import {
   useGetCustomerStatement,
   useListCustomers,
 } from "@rmixerp/contract";
-import { Button, Card, CardContent, CardHeader, CardTitle } from "@rmixerp/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@rmixerp/ui";
 import { useModulePermissions } from "../lib/usePermissions";
 import { StatusBadge, type BadgeTone } from "../components/StatusBadge";
+import { CsvExportButton } from "../components/CsvExportButton";
 
 function utilizationTone(basisPoints: number): BadgeTone {
   if (basisPoints > 10_000) return "red";
@@ -86,11 +87,7 @@ function AgingReportSection() {
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>Aging Report</CardTitle>
-        <a href="/api/reports/aging?format=csv" download>
-          <Button size="sm" variant="outline">
-            Export CSV
-          </Button>
-        </a>
+        <CsvExportButton url="/api/reports/aging?format=csv" filename="aging-report.csv" />
       </CardHeader>
       <CardContent>
         <table className="w-full text-sm">
@@ -187,11 +184,7 @@ function CreditOverridesSection() {
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>Credit Overrides Report</CardTitle>
-        <a href="/api/reports/credit-overrides?format=csv" download>
-          <Button size="sm" variant="outline">
-            Export CSV
-          </Button>
-        </a>
+        <CsvExportButton url="/api/reports/credit-overrides?format=csv" filename="credit-overrides-report.csv" />
       </CardHeader>
       <CardContent className="space-y-4">
         <table className="w-full text-sm">

@@ -115,6 +115,7 @@ export interface Translations {
     remove: string;
     search: string;
     exportCsv: string;
+    exporting: string;
     loading: string;
     empty: string;
     previous: string;
@@ -239,6 +240,7 @@ export const translations: Record<Locale, Translations> = {
       remove: "Remove",
       search: "Search…",
       exportCsv: "Export CSV",
+      exporting: "Exporting…",
       loading: "Loading…",
       empty: "No records yet.",
       previous: "Previous",
@@ -361,6 +363,7 @@ export const translations: Record<Locale, Translations> = {
       remove: "حذف",
       search: "بحث…",
       exportCsv: "تصدير CSV",
+      exporting: "جارٍ التصدير…",
       loading: "جارٍ التحميل…",
       empty: "لا توجد سجلات بعد.",
       previous: "السابق",

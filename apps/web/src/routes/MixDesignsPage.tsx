@@ -170,7 +170,7 @@ export function MixDesignsPage() {
         onSearch={setQ}
         createFields={fields}
         onCreate={(values) =>
-          create.mutate(
+          create.mutateAsync(
             { data: toRequestBody(values) },
             { onSuccess: (result) => result.status === 201 && setSelectedId(result.data.id) },
           )
