@@ -191,7 +191,7 @@ export function ResourceListPage<T extends { id: string }>({
       throwIfApiError(result);
       setShowCreate(false);
     } catch (err) {
-      setCreateFormError(err instanceof Error ? err.message : "Could not save — please check the fields and try again.");
+      setCreateFormError(err instanceof Error ? err.message : t.resource.saveError);
     }
   }
 
@@ -203,7 +203,7 @@ export function ResourceListPage<T extends { id: string }>({
       throwIfApiError(result);
       setEditingId(null);
     } catch (err) {
-      setEditFormError(err instanceof Error ? err.message : "Could not save — please check the fields and try again.");
+      setEditFormError(err instanceof Error ? err.message : t.resource.saveError);
     }
   }
 

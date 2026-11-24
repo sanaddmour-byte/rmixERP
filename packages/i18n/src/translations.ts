@@ -116,6 +116,7 @@ export interface Translations {
     search: string;
     exportCsv: string;
     exporting: string;
+    saveError: string;
     loading: string;
     empty: string;
     previous: string;
@@ -241,6 +242,7 @@ export const translations: Record<Locale, Translations> = {
       search: "Search…",
       exportCsv: "Export CSV",
       exporting: "Exporting…",
+      saveError: "Could not save — please check the fields and try again.",
       loading: "Loading…",
       empty: "No records yet.",
       previous: "Previous",
@@ -364,6 +366,7 @@ export const translations: Record<Locale, Translations> = {
       search: "بحث…",
       exportCsv: "تصدير CSV",
       exporting: "جارٍ التصدير…",
+      saveError: "تعذّر الحفظ — يرجى التحقق من الحقول والمحاولة مرة أخرى.",
       loading: "جارٍ التحميل…",
       empty: "لا توجد سجلات بعد.",
       previous: "السابق",
