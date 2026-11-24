@@ -13,9 +13,12 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 }));
 
 const deliverDeliveryOrder = vi.fn();
-vi.mock("@rmixerp/contract", () => ({ deliverDeliveryOrder }));
+const getDeliveryOrder = vi.fn();
+vi.mock("@rmixerp/contract", () => ({ deliverDeliveryOrder, getDeliveryOrder }));
 
-const { discardItem, enqueueProofOfDelivery, listQueue, retryAllPending, retryItem } = await import("../src/lib/syncQueue.js");
+const { discardItem, enqueueProofOfDelivery, findQueuedItemForDelivery, listQueue, retryAllPending, retryItem } = await import(
+  "../src/lib/syncQueue.js"
+);
 
 const REQUEST = { receivedQuantityM3: "5.0", signedByName: "Test Driver", signatureData: "data:image/svg+xml,<svg/>" };
 
@@ -23,6 +26,9 @@ describe("mobile offline sync queue (AsyncStorage-backed)", () => {
   beforeEach(() => {
     store.clear();
     deliverDeliveryOrder.mockReset();
+    getDeliveryOrder.mockReset();
+    // Default: no reconciliation help available (e.g. the device is still offline) — most existing tests don't exercise reconciliation at all.
+    getDeliveryOrder.mockResolvedValue({ status: 404, data: { error: { message: "not found", code: "not_found" } } });
   });
 
   it("enqueues a proof-of-delivery submission and lists it back as pending", async () => {
@@ -71,6 +77,57 @@ describe("mobile offline sync queue (AsyncStorage-backed)", () => {
     expect(updated?.lastError).toBe("Delivery order is not dispatched");
   });
 
+  it("reconciles a lost-response retry as synced when the server's stored proof of delivery matches what this device submitted", async () => {
+    // The request actually succeeded server-side on an earlier attempt,
+    // but this device never saw the response (connection dropped) — a
+    // retry now gets a 400 ("not dispatched", since it's already
+    // delivered), which must NOT be treated as a real conflict.
+    await enqueueProofOfDelivery({ deliveryOrderId: "do-6", request: REQUEST });
+    deliverDeliveryOrder.mockResolvedValue({ status: 400, data: { error: { message: "Delivery order is not dispatched", code: "invalid_status" } } });
+    getDeliveryOrder.mockResolvedValue({
+      status: 200,
+      data: {
+        id: "do-6",
+        status: "delivered",
+        proofOfDelivery: { id: "pod-1", ...REQUEST, deliveryOrderId: "do-6", companyId: "c-1", createdAt: new Date().toISOString() },
+      },
+    });
+
+    const [item] = await listQueue();
+    const outcome = await retryItem(item!.id);
+
+    expect(outcome).toBe("synced");
+    expect(await listQueue()).toHaveLength(0);
+  });
+
+  it("still treats it as a genuine conflict when the server's stored proof of delivery doesn't match this device's submission", async () => {
+    await enqueueProofOfDelivery({ deliveryOrderId: "do-7", request: REQUEST });
+    deliverDeliveryOrder.mockResolvedValue({ status: 400, data: { error: { message: "Delivery order is not dispatched", code: "invalid_status" } } });
+    getDeliveryOrder.mockResolvedValue({
+      status: 200,
+      data: {
+        id: "do-7",
+        status: "delivered",
+        proofOfDelivery: {
+          id: "pod-2",
+          receivedQuantityM3: "9.9",
+          signedByName: "Someone Else",
+          signatureData: "data:image/svg+xml,<svg/>",
+          deliveryOrderId: "do-7",
+          companyId: "c-1",
+          createdAt: new Date().toISOString(),
+        },
+      },
+    });
+
+    const [item] = await listQueue();
+    const outcome = await retryItem(item!.id);
+
+    expect(outcome).toBe("conflict");
+    const [updated] = await listQueue();
+    expect(updated?.status).toBe("conflict");
+  });
+
   it("discards a conflict item permanently", async () => {
     await enqueueProofOfDelivery({ deliveryOrderId: "do-5", request: REQUEST });
     deliverDeliveryOrder.mockResolvedValue({ status: 404, data: { error: { message: "not found", code: "not_found" } } });
@@ -96,5 +153,12 @@ describe("mobile offline sync queue (AsyncStorage-backed)", () => {
     expect(remaining).toHaveLength(1);
     expect(remaining[0]?.status).toBe("conflict");
     expect(remaining[0]?.payload.deliveryOrderId).toBe("conflict-me");
+  });
+
+  it("finds the queued item for a given delivery, so its own screen can reflect real sync state", async () => {
+    await enqueueProofOfDelivery({ deliveryOrderId: "do-8", request: REQUEST });
+    const found = await findQueuedItemForDelivery("do-8");
+    expect(found?.payload.deliveryOrderId).toBe("do-8");
+    expect(await findQueuedItemForDelivery("do-does-not-exist")).toBeNull();
   });
 });

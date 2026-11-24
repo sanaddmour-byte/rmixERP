@@ -1,5 +1,6 @@
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import { Sidebar } from "./components/Sidebar";
+import { getAccessToken } from "./lib/session";
 import { HomePage } from "./routes/HomePage";
 import { ReportsPage } from "./routes/ReportsPage";
 import { HealthPage } from "./routes/HealthPage";
@@ -41,10 +42,25 @@ import { ApprovalsInboxPage } from "./routes/ApprovalsInboxPage";
 import { NotificationsPage } from "./routes/NotificationsPage";
 
 export function App() {
+  const [location] = useLocation();
+  // Signed-out users on /login get the full viewport — no nav rail
+  // competing for width, which is the whole page at a 390px viewport (a
+  // 256px-wide always-on sidebar left sign-in's own inputs ~36px wide).
+  // Once signed in there's a real app to navigate, so the shell returns.
+  if (location === "/login" && !getAccessToken()) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4 text-navy-900 dark:bg-navy-950 dark:text-navy-100">
+        <LoginPage />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen bg-navy-50 text-navy-900 dark:bg-navy-950 dark:text-navy-100">
+    // A neutral gray canvas, not a navy tint — the work surface (Card) is
+    // white, so this just needs to recede, not read as part of the brand.
+    <div className="flex min-h-screen flex-col bg-gray-50 text-navy-900 dark:bg-navy-950 dark:text-navy-100 md:flex-row">
       <Sidebar />
-      <main className="min-w-0 flex-1 p-6">
+      <main className="min-w-0 flex-1 p-4 md:p-6">
         <Switch>
           <Route path="/login" component={LoginPage} />
           <Route path="/health" component={HealthPage} />

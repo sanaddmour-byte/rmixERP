@@ -10,6 +10,28 @@ environment today — `MockClearanceProvider` is, via
 shell is verified against ISTD's real technical specification (or a sandbox
 account).
 
+## Hard blocker: `istd.gov.jo` is unreachable from this environment
+
+The agentic session that most recently worked this list was given ISTD's
+official procedure manual URL (`https://istd.gov.jo/ebv4.0/root_storage/en/eb_list_page/procedure_manual_for_linking_to_the_jordanian_national_electronic_invoicing_system.pdf`)
+and attempted to fetch it twice, in two separate sessions. Both attempts
+failed identically: `getaddrinfo ENOTFOUND istd.gov.jo` — the domain does
+not resolve from this environment's network, because it is outside the
+session's allowed outbound domains (an environment-level network policy,
+not something fixable from inside the session). No ISTD sandbox account
+was available either. **None of the 9 open questions below were advanced
+by that attempt** — do not read the rest of this document as "checked
+against the manual and still unresolved"; it is "never actually read."
+
+To close this out: either (a) add `istd.gov.jo` (and any ISTD API
+subdomain the manual turns out to specify) to the environment's allowed
+network domains and re-run the fetch, (b) download the manual outside this
+environment and paste its relevant sections into a session with no network
+restriction on reading pasted text, or (c) obtain ISTD sandbox credentials
+and point a session at them directly. Only one of these — not a vendor
+blog, not a general description of JoFotara — resolves the questions
+below.
+
 ## What is grounded (general public/vendor documentation, not primary ISTD docs)
 
 - JoFotara is Jordan's National E-Invoicing System, operated by the Income
@@ -82,3 +104,37 @@ accordingly, remove the corresponding `// VERIFY:` comment, and delete the
 question from this file. Do not mark an item resolved from secondary
 sources (vendor blog posts, marketing pages) — the whole point of this
 list is that only ISTD's own spec (or verified sandbox behavior) counts.
+
+## What was fixed independently of the above (no ISTD access needed)
+
+None of these touch the 9 open questions — they're provider-agnostic
+robustness/workflow gaps a review found, fixed without knowing ISTD's
+actual field formats:
+
+- **Rejected documents had no way back.** `rejected` was effectively a
+  dead end — the invoice state machine already allowed `rejected ->
+  draft` but no route ever used it, and the UI showed no action at all
+  for a rejected row. Added `POST /invoices/{id}/correct-and-resubmit`,
+  `/credit-notes/{id}/correct-and-resubmit`, `/debit-notes/{id}/correct-
+  and-resubmit` (`apps/api/src/clearance/service.ts`'s
+  `correctAndResubmit*` functions) — audited, resets the attempt counter
+  for a fresh retry/backoff cycle, reuses the same ICV (still the fiscal
+  document's identity, not the attempt's). A "Correct & resubmit" button
+  now appears on the clearance queue for rejected rows. This only reopens
+  the *submission* path — it cannot fix *why* a document was rejected,
+  since this system has no capability to edit an invoice's line items/
+  amounts once created at all (a separate, pre-existing gap, not
+  something to improvise a design for here).
+- **No request timeout.** `JoFotaraProvider.submit`'s `fetch` call had no
+  `AbortController`/timeout — a hung connection would wait indefinitely
+  rather than failing into the bounded-retry path. Added a 30s default
+  timeout (configurable via `JoFotaraConfig.timeoutMs`), verified with a
+  test server that accepts the connection and never responds
+  (`apps/api/test/jofotaraProvider.test.ts`).
+- **Simulation was invisible.** Nothing told an operator that
+  `MockClearanceProvider` — not real ISTD clearance — was active.
+  `MockClearanceProvider`'s QR/reference already carried a `MOCK-` prefix,
+  but that's only visible on a document that already cleared, and easy to
+  miss. Added `GET /clearance-provider-info` and a persistent "Simulated
+  clearance" banner on the clearance queue screen whenever
+  `CLEARANCE_PROVIDER=jofotara` isn't set.

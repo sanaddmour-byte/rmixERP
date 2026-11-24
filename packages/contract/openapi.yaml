@@ -1507,6 +1507,9 @@ paths:
         - name: customerId
           in: query
           schema: { type: string, format: uuid }
+        - name: branchId
+          in: query
+          schema: { type: string, format: uuid }
       responses:
         "200":
           description: OK
@@ -2584,6 +2587,14 @@ paths:
           in: query
           description: Filter to deliveries assigned to one driver — the mobile driver app's "my deliveries" list.
           schema: { type: string, format: uuid }
+        - name: truckId
+          in: query
+          description: Filter to deliveries assigned to one truck.
+          schema: { type: string, format: uuid }
+        - name: unassigned
+          in: query
+          description: When true, filter to deliveries with no truck or driver assigned yet (the dispatch board's "unassigned loads" view).
+          schema: { type: boolean }
         - name: salesOrderId
           in: query
           description: Filter to deliveries drawn from one sales order — the sales-order detail screen's "see its deliveries" link.
@@ -2726,6 +2737,32 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "400": { $ref: "#/components/responses/ValidationError" }
+
+  /delivery-orders/reconcile-sales-order-line:
+    post:
+      operationId: reconcileDeliveryOrderSalesOrderLine
+      tags: [deliveryOrders]
+      summary: >
+        Backfill `salesOrderLineId` on existing non-voided delivery orders
+        created before that field was required (see
+        CreateDeliveryOrderRequest). Only unambiguous matches — a delivery
+        whose sales order has exactly one non-voided line — are backfilled;
+        every write is audited. Everything else (zero or multiple candidate
+        lines) is returned under `needsReview` instead of guessed at.
+        `dryRun: true` (the default) previews the backfill without writing.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReconcileSalesOrderLineRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReconcileSalesOrderLineResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /dispatch/schedule:
     get:
@@ -2932,6 +2969,36 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "400": { $ref: "#/components/responses/ValidationError" }
 
+  /invoices/{id}/correct-and-resubmit:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: correctAndResubmitInvoice
+      tags: [clearance]
+      summary: >
+        Reopens a clearance-rejected invoice for another attempt: moves it
+        back to `draft`/`pending` clearance status (DOMAIN.md's state
+        machine already allows `rejected -> draft`) and resets the attempt
+        counter, auditing the transition. Only the resubmission path
+        itself — the invoice's own line items/amounts are not editable
+        once created (no invoice-editing capability exists in this
+        system), so a rejection caused by the fiscal data itself (wrong
+        tax number, etc.) needs that corrected upstream (e.g. on the
+        customer record) before resubmitting, not here. Call
+        `/invoices/{id}/submit-for-clearance` afterward to actually
+        resubmit.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvoiceDetail" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
   /invoices/{id}/issue:
     parameters:
       - $ref: "#/components/parameters/IdParam"
@@ -2974,6 +3041,51 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "400": { $ref: "#/components/responses/ValidationError" }
 
+  /credit-notes/{id}/correct-and-resubmit:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: correctAndResubmitCreditNote
+      tags: [clearance]
+      summary: >
+        Reopens a clearance-rejected credit note for another attempt —
+        resets its clearance status back to `pending` and the attempt
+        counter, audited. Credit notes have no independent document
+        state machine and no editing capability, so (as with invoices)
+        this only reopens the submission path; it does not change the
+        note's own data. Call `/credit-notes/{id}/submit-for-clearance`
+        afterward to actually resubmit.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreditNote" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
+  /debit-notes/{id}/correct-and-resubmit:
+    parameters:
+      - $ref: "#/components/parameters/IdParam"
+    post:
+      operationId: correctAndResubmitDebitNote
+      tags: [clearance]
+      summary: Reopens a clearance-rejected debit note for another attempt. Same semantics as the credit-note correction endpoint.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DebitNote" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+
   /debit-notes/{id}/submit-for-clearance:
     parameters:
       - $ref: "#/components/parameters/IdParam"
@@ -2996,6 +3108,25 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "400": { $ref: "#/components/responses/ValidationError" }
+
+  /clearance-provider-info:
+    get:
+      operationId: getClearanceProviderInfo
+      tags: [clearance]
+      summary: >
+        Which ClearanceProvider is active — lets the clearance queue
+        screen show a persistent "Simulated — not submitted to ISTD"
+        banner whenever the real JoFotaraProvider isn't configured
+        (CLEARANCE_PROVIDER env var), instead of leaving that only
+        inferable from a cleared document's own MOCK-prefixed QR payload.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClearanceProviderInfo" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /clearance-queue:
     get:
@@ -3212,6 +3343,35 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "400": { $ref: "#/components/responses/ValidationError" }
+
+  /receivables/reconcile-gl-postings:
+    post:
+      operationId: backfillReceivablesGlPostings
+      tags: [receivables]
+      summary: >
+        Backfill journal entries for receivables documents (issued/
+        partially-paid/paid invoices, cleared credit/debit notes,
+        collections, cleared/bounced/cancelled post-dated cheques) that
+        predate GL posting being wired up for that document type.
+        `postJournalEntry` is itself idempotent per source document, so
+        this is safe to call repeatedly — a document that already has a
+        journal entry is left untouched and reported as `alreadyPosted`.
+        Each backfilled entry is dated to the document's own historical
+        effective date (e.g. `invoicedAt`), not the day the backfill ran.
+        `dryRun: true` (the default) previews without writing.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReconcileReceivablesGlPostingsRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReconcileReceivablesGlPostingsResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /reports/customer-statement:
     get:
@@ -4950,7 +5110,7 @@ components:
       required:
         [id, companyId, salesOrderId, productId, quantityM3, priceListId, priceResolutionTier,
          concreteUnitPriceJod, deliveryUnitPriceJod, taxRateBasisPoints, netJod, taxJod, totalJod,
-         charges, createdAt, updatedAt, voidedAt]
+         charges, deliveredQuantityM3, remainingQuantityM3, createdAt, updatedAt, voidedAt]
       properties:
         id: { type: string, format: uuid }
         companyId: { type: string, format: uuid }
@@ -4966,6 +5126,12 @@ components:
         taxJod: { type: string }
         totalJod: { type: string }
         charges: { type: array, items: { $ref: "#/components/schemas/LineCharge" } }
+        deliveredQuantityM3:
+          type: string
+          description: "Sum of quantityM3 across every non-voided delivery order referencing this line, any status."
+        remainingQuantityM3:
+          type: string
+          description: "quantityM3 - deliveredQuantityM3. Can go negative if over-delivered; the UI should treat <= 0 as ineligible for a new delivery."
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
         voidedAt: { type: string, format: date-time, nullable: true }
@@ -5478,8 +5644,11 @@ components:
          driverId, quantityM3, status, scheduledAt, dispatchedAt, deliveredAt, qcFlagged, qcFlagReason,
          creditCheckPolicy, creditCheckOutstandingJod, creditCheckExceedsByJod, creditOverride, creditOverrideReason,
          creditOverrideBy, documentExpiryOverride, documentExpiryOverrideReason, documentExpiryOverrideBy, notes,
-         createdAt, updatedAt, voidedAt]
+         customerName, projectName, productName, createdAt, updatedAt, voidedAt]
       properties:
+        customerName: { type: string, description: "Joined from the sales order's customer — display-only." }
+        projectName: { type: string, nullable: true, description: "Joined from the sales order's project, when it has one." }
+        productName: { type: string, nullable: true, description: "Joined from salesOrderLineId's product; null for a legacy delivery with no line." }
         id: { type: string, format: uuid }
         companyId: { type: string, format: uuid }
         branchId: { type: string, format: uuid }
@@ -5517,16 +5686,72 @@ components:
         voidedAt: { type: string, format: date-time, nullable: true }
     CreateDeliveryOrderRequest:
       type: object
-      required: [branchId, salesOrderId, quantityM3, scheduledAt]
+      required: [branchId, salesOrderId, salesOrderLineId, quantityM3, scheduledAt]
       properties:
         branchId: { type: string, format: uuid }
         salesOrderId: { type: string, format: uuid }
-        salesOrderLineId: { type: string, format: uuid, nullable: true }
+        salesOrderLineId:
+          type: string
+          format: uuid
+          description: Must belong to salesOrderId (validated server-side) and have remaining undelivered quantity. Required so every delivery created going forward is invoiceable; pre-existing deliveries created before this rule may still carry a null value, see POST /delivery-orders/reconcile-sales-order-line.
         productionOrderId: { type: string, format: uuid, nullable: true }
         batchRecordId: { type: string, format: uuid, nullable: true }
         quantityM3: { type: string }
         scheduledAt: { type: string, format: date-time }
         notes: { type: string, nullable: true }
+    ReconcileSalesOrderLineRequest:
+      type: object
+      properties:
+        dryRun: { type: boolean, default: true }
+    ReconcileSalesOrderLineResponse:
+      type: object
+      required: [dryRun, backfilled, needsReview]
+      properties:
+        dryRun: { type: boolean }
+        backfilled:
+          type: array
+          description: Delivery orders that were (or, if dryRun, would be) updated.
+          items:
+            type: object
+            required: [deliveryOrderId, salesOrderId, salesOrderLineId]
+            properties:
+              deliveryOrderId: { type: string, format: uuid }
+              salesOrderId: { type: string, format: uuid }
+              salesOrderLineId: { type: string, format: uuid }
+        needsReview:
+          type: array
+          description: Delivery orders with a null salesOrderLineId that could not be backfilled unambiguously.
+          items:
+            type: object
+            required: [deliveryOrderId, salesOrderId, candidateLineCount, reason]
+            properties:
+              deliveryOrderId: { type: string, format: uuid }
+              salesOrderId: { type: string, format: uuid }
+              candidateLineCount: { type: integer }
+              reason: { type: string }
+    ReconcileReceivablesGlPostingsRequest:
+      type: object
+      properties:
+        dryRun: { type: boolean, default: true }
+    ReconcileReceivablesGlPostingsResponse:
+      type: object
+      required: [dryRun, posted, alreadyPosted]
+      properties:
+        dryRun: { type: boolean }
+        posted:
+          type: array
+          description: Documents that were (or, if dryRun, would be) backfilled with a new journal entry.
+          items:
+            type: object
+            required: [sourceDocumentType, sourceDocumentId, documentNumber, entryDate]
+            properties:
+              sourceDocumentType: { type: string }
+              sourceDocumentId: { type: string, format: uuid }
+              documentNumber: { type: string }
+              entryDate: { type: string, format: date-time }
+        alreadyPosted:
+          type: integer
+          description: Count of qualifying documents that already had a journal entry and were left untouched.
     UpdateDeliveryOrderRequest:
       type: object
       properties:
@@ -5588,7 +5813,7 @@ components:
     DispatchScheduleItem:
       type: object
       required:
-        [id, status, quantityM3, scheduledAt, dispatchedAt, deliveredAt, truckId, driverId, customerName, qcFlagged]
+        [id, status, quantityM3, scheduledAt, dispatchedAt, deliveredAt, truckId, driverId, customerName, projectName, productName, qcFlagged]
       properties:
         id: { type: string, format: uuid }
         status: { type: string, enum: [planned, dispatched, delivered, invoiced] }
@@ -5599,6 +5824,8 @@ components:
         truckId: { type: string, format: uuid, nullable: true }
         driverId: { type: string, format: uuid, nullable: true }
         customerName: { type: string }
+        projectName: { type: string, nullable: true }
+        productName: { type: string, nullable: true }
         qcFlagged: { type: boolean }
     DispatchScheduleResponse:
       type: object
@@ -5774,6 +6001,12 @@ components:
         total: { type: integer }
         page: { type: integer }
         pageSize: { type: integer }
+    ClearanceProviderInfo:
+      type: object
+      required: [simulated, providerName]
+      properties:
+        simulated: { type: boolean, description: "true when MockClearanceProvider is active — nothing is actually submitted to ISTD." }
+        providerName: { type: string, description: "\"mock\" or \"jofotara\"." }
 
     Collection:
       type: object
@@ -5893,7 +6126,7 @@ components:
       required: [date, type, documentNumber, debitJod, creditJod, runningBalanceJod]
       properties:
         date: { type: string, format: date-time }
-        type: { type: string, enum: [invoice, collection] }
+        type: { type: string, enum: [invoice, collection, credit_note, debit_note] }
         documentNumber: { type: string }
         debitJod: { type: string }
         creditJod: { type: string }
@@ -6070,7 +6303,7 @@ components:
       type: object
       required:
         [id, purchaseOrderId, rawMaterialId, quantity, unitPriceJod, taxRateBasisPoints, netJod, taxJod, totalJod,
-         receivedQuantity, varianceQuantity, createdAt, voidedAt]
+         receivedQuantity, varianceQuantity, billedQuantity, remainingBillableQuantity, createdAt, voidedAt]
       properties:
         id: { type: string, format: uuid }
         purchaseOrderId: { type: string, format: uuid }
@@ -6083,6 +6316,8 @@ components:
         totalJod: { type: string }
         receivedQuantity: { type: string, description: "Sum of goods-receipt lines against this PO line." }
         varianceQuantity: { type: string, description: "receivedQuantity - quantity; positive means over-received." }
+        billedQuantity: { type: string, description: "Sum of non-voided vendor-bill lines against this PO line." }
+        remainingBillableQuantity: { type: string, description: "receivedQuantity - billedQuantity, floored at zero — what a vendor bill can still draw on." }
         createdAt: { type: string, format: date-time }
         voidedAt: { type: string, format: date-time, nullable: true }
     PurchaseOrder:

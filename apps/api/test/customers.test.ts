@@ -109,6 +109,24 @@ describe("customers CRUD", () => {
     expect(res.body.creditPolicy).toBe("warning");
   });
 
+  it("400s a malformed creditLimitJod instead of 500ing (not a valid decimal string)", async () => {
+    const res = await request(app)
+      .put(`/api/customers/${customerId}`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ creditLimitJod: "not-a-number" });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("validation_error");
+  });
+
+  it("400s a malformed creditLimitJod on create too", async () => {
+    const res = await request(app)
+      .post("/api/customers")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ name: "Bad Credit Limit Co", creditLimitJod: "12.3456" }); // 4 decimal places — too precise for fils
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("validation_error");
+  });
+
   it("voids it, after which it 404s and disappears from the list", async () => {
     const voidRes = await request(app)
       .delete(`/api/customers/${customerId}`)

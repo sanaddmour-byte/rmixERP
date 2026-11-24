@@ -1,16 +1,32 @@
 import { Router } from "express";
-import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
-import { company, customer, deliveryOrder, batchRecord, driver, proofOfDelivery, salesOrder, salesOrderLine, truck, withTenant, type Tx } from "@rmixerp/db";
+import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import {
+  company,
+  customer,
+  deliveryOrder,
+  batchRecord,
+  driver,
+  product,
+  project,
+  proofOfDelivery,
+  salesOrder,
+  salesOrderLine,
+  truck,
+  withTenant,
+  type Tx,
+} from "@rmixerp/db";
 import { assertDeliveryOrderTransition, evaluateCreditCheck, evaluateDocumentExpiry, fils, filsToJodString, ZERO_FILS } from "@rmixerp/core";
 import {
   CreateDeliveryOrderBody,
   DeliverDeliveryOrderBody,
   DispatchDeliveryOrderBody,
+  ReconcileDeliveryOrderSalesOrderLineBody,
   UpdateDeliveryOrderBody,
   type DeliveryOrder,
   type DeliveryOrderDetail,
   type DispatchScheduleItem,
   type ProofOfDelivery,
+  type ReconcileSalesOrderLineResponse,
 } from "@rmixerp/contract";
 import { db } from "../db";
 import { requireAuth } from "../middleware/requireAuth";
@@ -28,7 +44,15 @@ type DeliveryOrderRow = typeof deliveryOrder.$inferSelect;
 type BatchRecordRow = typeof batchRecord.$inferSelect;
 type ProofOfDeliveryRow = typeof proofOfDelivery.$inferSelect;
 
-function toApi(row: DeliveryOrderRow, batch: BatchRecordRow | null): DeliveryOrder {
+interface JoinedNames {
+  customerName: string;
+  projectName: string | null;
+  productName: string | null;
+}
+
+const UNKNOWN_JOINED_NAMES: JoinedNames = { customerName: "—", projectName: null, productName: null };
+
+function toApi(row: DeliveryOrderRow, batch: BatchRecordRow | null, joined: JoinedNames = UNKNOWN_JOINED_NAMES): DeliveryOrder {
   return {
     id: row.id,
     companyId: row.companyId,
@@ -56,10 +80,44 @@ function toApi(row: DeliveryOrderRow, batch: BatchRecordRow | null): DeliveryOrd
     documentExpiryOverrideReason: row.documentExpiryOverrideReason,
     documentExpiryOverrideBy: row.documentExpiryOverrideBy,
     notes: row.notes,
+    customerName: joined.customerName,
+    projectName: joined.projectName,
+    productName: joined.productName,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     voidedAt: row.voidedAt?.toISOString() ?? null,
   };
+}
+
+/**
+ * Batched name lookups for a set of delivery orders — customer/project via
+ * their sales order, product via their sales-order line (null for a
+ * legacy delivery created before that field was required). One query per
+ * join, not per row.
+ */
+async function loadJoinedNames(tx: Tx, deliveryIds: string[]): Promise<Map<string, JoinedNames>> {
+  const result = new Map<string, JoinedNames>();
+  if (deliveryIds.length === 0) return result;
+
+  const rows = await tx
+    .select({
+      deliveryId: deliveryOrder.id,
+      customerName: customer.name,
+      projectName: project.name,
+      productName: product.name,
+    })
+    .from(deliveryOrder)
+    .innerJoin(salesOrder, eq(deliveryOrder.salesOrderId, salesOrder.id))
+    .innerJoin(customer, eq(salesOrder.customerId, customer.id))
+    .leftJoin(project, eq(salesOrder.projectId, project.id))
+    .leftJoin(salesOrderLine, eq(deliveryOrder.salesOrderLineId, salesOrderLine.id))
+    .leftJoin(product, eq(salesOrderLine.productId, product.id))
+    .where(inArray(deliveryOrder.id, deliveryIds));
+
+  for (const r of rows) {
+    result.set(r.deliveryId, { customerName: r.customerName, projectName: r.projectName, productName: r.productName });
+  }
+  return result;
 }
 
 function podToApi(row: ProofOfDeliveryRow): ProofOfDelivery {
@@ -94,7 +152,8 @@ async function loadDeliveryOrderDetail(tx: Tx, id: string): Promise<DeliveryOrde
   if (!row) return null;
   const batch = await loadBatch(tx, row.batchRecordId);
   const [pod] = await tx.select().from(proofOfDelivery).where(eq(proofOfDelivery.deliveryOrderId, id));
-  return { ...toApi(row, batch), proofOfDelivery: pod ? podToApi(pod) : null };
+  const joined = (await loadJoinedNames(tx, [id])).get(id);
+  return { ...toApi(row, batch, joined), proofOfDelivery: pod ? podToApi(pod) : null };
 }
 
 deliveryOrdersRouter.get("/delivery-orders", requireAuth, requirePermission(MODULE, "view"), async (req, res) => {
@@ -102,6 +161,8 @@ deliveryOrdersRouter.get("/delivery-orders", requireAuth, requirePermission(MODU
   const status = queryString(req, "status");
   const branchId = queryString(req, "branchId");
   const driverId = queryString(req, "driverId");
+  const truckId = queryString(req, "truckId");
+  const unassigned = queryString(req, "unassigned") === "true";
   const salesOrderId = queryString(req, "salesOrderId");
   const scheduledFrom = queryString(req, "scheduledFrom");
   const scheduledTo = queryString(req, "scheduledTo");
@@ -117,19 +178,27 @@ deliveryOrdersRouter.get("/delivery-orders", requireAuth, requirePermission(MODU
       status ? eq(deliveryOrder.status, status as DeliveryOrderRow["status"]) : undefined,
       branchId ? eq(deliveryOrder.branchId, branchId) : undefined,
       driverId ? eq(deliveryOrder.driverId, driverId) : undefined,
+      truckId ? eq(deliveryOrder.truckId, truckId) : undefined,
+      unassigned ? or(isNull(deliveryOrder.truckId), isNull(deliveryOrder.driverId)) : undefined,
       salesOrderLineIds ? inArray(deliveryOrder.salesOrderLineId, salesOrderLineIds) : undefined,
       scheduledFrom ? gte(deliveryOrder.scheduledAt, new Date(scheduledFrom)) : undefined,
       scheduledTo ? lte(deliveryOrder.scheduledAt, new Date(scheduledTo)) : undefined,
     );
     const [rows, countRows] = await Promise.all([
-      tx.select().from(deliveryOrder).where(where).orderBy(desc(deliveryOrder.createdAt), deliveryOrder.id).limit(pagination.limit).offset(pagination.offset),
+      // Chronological by scheduled time, not creation order — a list of
+      // deliveries (the driver app's "My Deliveries", Dispatch's own
+      // queue table) is read as an operational queue: the next thing
+      // due is what belongs at the top, not whatever was most recently
+      // entered into the system (the review's "next stop easy to find").
+      tx.select().from(deliveryOrder).where(where).orderBy(deliveryOrder.scheduledAt, deliveryOrder.id).limit(pagination.limit).offset(pagination.offset),
       tx.select({ count: sql<number>`count(*)::int` }).from(deliveryOrder).where(where),
     ]);
     const batchIds = rows.map((r) => r.batchRecordId).filter((id): id is string => id !== null);
     const batches = batchIds.length > 0 ? await tx.select().from(batchRecord).where(inArray(batchRecord.id, batchIds)) : [];
     const batchById = new Map(batches.map((b) => [b.id, b]));
+    const joinedByDeliveryId = await loadJoinedNames(tx, rows.map((r) => r.id));
     return {
-      items: rows.map((r) => toApi(r, r.batchRecordId ? (batchById.get(r.batchRecordId) ?? null) : null)),
+      items: rows.map((r) => toApi(r, r.batchRecordId ? (batchById.get(r.batchRecordId) ?? null) : null, joinedByDeliveryId.get(r.id))),
       total: countRows[0]?.count ?? 0,
     };
   });
@@ -153,13 +222,24 @@ deliveryOrdersRouter.post("/delivery-orders", requireAuth, requirePermission(MOD
     if (!order) return { kind: "not_found_sales_order" as const };
     if (order.status !== "confirmed" && order.status !== "fulfilled") return { kind: "invalid_sales_order_status" as const };
 
+    // A delivery can only ever be invoiced against the line it names (see
+    // invoices.ts's hard require), so a line from the wrong order — or no
+    // line at all — silently produces an uninvoiceable delivery. Required
+    // on the request schema already; this closes the server-side gap that
+    // let a mismatched line slip through unchecked.
+    const [line] = await tx
+      .select()
+      .from(salesOrderLine)
+      .where(and(eq(salesOrderLine.id, input.salesOrderLineId), isNull(salesOrderLine.voidedAt)));
+    if (!line || line.salesOrderId !== input.salesOrderId) return { kind: "invalid_sales_order_line" as const };
+
     const [row] = await tx
       .insert(deliveryOrder)
       .values({
         companyId: req.auth!.companyId,
         branchId: input.branchId,
         salesOrderId: input.salesOrderId,
-        salesOrderLineId: input.salesOrderLineId ?? null,
+        salesOrderLineId: input.salesOrderLineId,
         productionOrderId: input.productionOrderId ?? null,
         batchRecordId: input.batchRecordId ?? null,
         quantityM3: input.quantityM3,
@@ -189,9 +269,102 @@ deliveryOrdersRouter.post("/delivery-orders", requireAuth, requirePermission(MOD
     res.status(400).json(validationError({ salesOrderId: "sales order must be confirmed or fulfilled" }));
     return;
   }
+  if (result.kind === "invalid_sales_order_line") {
+    res.status(400).json(validationError({ salesOrderLineId: "must be a non-voided line belonging to the given sales order" }));
+    return;
+  }
   const batch = await withTenant(db, req.auth!.companyId, (tx) => loadBatch(tx, result.row.batchRecordId));
   res.status(201).json(toApi(result.row, batch));
 });
+
+/**
+ * Audited repair path for delivery orders created before `salesOrderLineId`
+ * became required (see CreateDeliveryOrderBody) — backfills only the
+ * unambiguous case (the referenced sales order has exactly one non-voided
+ * line), leaving every genuinely ambiguous row untouched and reported
+ * under `needsReview` rather than guessed at. Gated behind `:approve`
+ * (a privileged, data-correcting bulk action), same tier as the
+ * credit/document-expiry override pattern elsewhere in this router.
+ */
+deliveryOrdersRouter.post(
+  "/delivery-orders/reconcile-sales-order-line",
+  requireAuth,
+  requirePermission(MODULE, "approve"),
+  async (req, res) => {
+    const parsed = ReconcileDeliveryOrderSalesOrderLineBody.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json(validationError(parsed.error.flatten()));
+      return;
+    }
+    const dryRun = parsed.data.dryRun;
+
+    const result = await withTenant(db, req.auth!.companyId, async (tx) => {
+      const orphans = await tx
+        .select()
+        .from(deliveryOrder)
+        .where(and(isNull(deliveryOrder.salesOrderLineId), isNull(deliveryOrder.voidedAt)));
+
+      const bySalesOrder = new Map<string, DeliveryOrderRow[]>();
+      for (const o of orphans) {
+        const arr = bySalesOrder.get(o.salesOrderId) ?? [];
+        arr.push(o);
+        bySalesOrder.set(o.salesOrderId, arr);
+      }
+
+      const backfilled: ReconcileSalesOrderLineResponse["backfilled"] = [];
+      const needsReview: ReconcileSalesOrderLineResponse["needsReview"] = [];
+
+      for (const [salesOrderId, deliveries] of bySalesOrder) {
+        const lines = await tx
+          .select({ id: salesOrderLine.id })
+          .from(salesOrderLine)
+          .where(and(eq(salesOrderLine.salesOrderId, salesOrderId), isNull(salesOrderLine.voidedAt)));
+
+        if (lines.length !== 1) {
+          for (const d of deliveries) {
+            needsReview.push({
+              deliveryOrderId: d.id,
+              salesOrderId,
+              candidateLineCount: lines.length,
+              reason:
+                lines.length === 0
+                  ? "sales order has no non-voided lines"
+                  : "sales order has multiple lines — cannot infer which one without ambiguity",
+            });
+          }
+          continue;
+        }
+
+        const onlyLineId = lines[0]!.id;
+        for (const before of deliveries) {
+          backfilled.push({ deliveryOrderId: before.id, salesOrderId, salesOrderLineId: onlyLineId });
+          if (dryRun) continue;
+          const [after] = await tx
+            .update(deliveryOrder)
+            .set({ salesOrderLineId: onlyLineId, updatedAt: new Date() })
+            .where(eq(deliveryOrder.id, before.id))
+            .returning();
+          if (!after) throw new Error("reconcile update returned no row");
+          await writeAudit(tx, {
+            companyId: req.auth!.companyId,
+            branchId: before.branchId,
+            actorUserId: req.auth!.userId,
+            entityType: "delivery_order",
+            entityId: before.id,
+            action: "backfill:sales_order_line",
+            before,
+            after,
+            reason: "Unambiguous single-line sales order — automated reconciliation (POST /delivery-orders/reconcile-sales-order-line).",
+          });
+        }
+      }
+
+      return { backfilled, needsReview };
+    });
+
+    res.status(200).json({ dryRun, backfilled: result.backfilled, needsReview: result.needsReview } satisfies ReconcileSalesOrderLineResponse);
+  },
+);
 
 deliveryOrdersRouter.get("/delivery-orders/:id", requireAuth, requirePermission(MODULE, "view"), async (req, res) => {
   const body = await withTenant(db, req.auth!.companyId, (tx) => loadDeliveryOrderDetail(tx, paramId(req)));
@@ -504,9 +677,11 @@ deliveryOrdersRouter.get("/dispatch/schedule", requireAuth, requirePermission(MO
     const batchIds = rows.map((r) => r.delivery.batchRecordId).filter((bid): bid is string => bid !== null);
     const batches = batchIds.length > 0 ? await tx.select().from(batchRecord).where(inArray(batchRecord.id, batchIds)) : [];
     const batchById = new Map(batches.map((b) => [b.id, b]));
+    const joinedByDeliveryId = await loadJoinedNames(tx, rows.map((r) => r.delivery.id));
 
     return rows.map((r) => {
       const batch = r.delivery.batchRecordId ? (batchById.get(r.delivery.batchRecordId) ?? null) : null;
+      const joined = joinedByDeliveryId.get(r.delivery.id);
       return {
         id: r.delivery.id,
         status: r.delivery.status,
@@ -517,6 +692,8 @@ deliveryOrdersRouter.get("/dispatch/schedule", requireAuth, requirePermission(MO
         truckId: r.delivery.truckId,
         driverId: r.delivery.driverId,
         customerName: r.customerName,
+        projectName: joined?.projectName ?? null,
+        productName: joined?.productName ?? null,
         qcFlagged: batch?.qcFlagged ?? false,
       };
     });

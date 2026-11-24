@@ -6,13 +6,21 @@ import { db } from "../db";
 import { requireAuth } from "../middleware/requireAuth";
 import { requirePermission } from "../middleware/requirePermission";
 import { idempotent } from "../middleware/idempotency";
-import { createClearanceProvider } from "../clearance/providerFactory";
-import { submitCreditNoteForClearance, submitDebitNoteForClearance, submitInvoiceForClearance } from "../clearance/service";
+import { createClearanceProvider, isClearanceSimulated } from "../clearance/providerFactory";
+import {
+  correctAndResubmitCreditNote,
+  correctAndResubmitDebitNote,
+  correctAndResubmitInvoice,
+  submitCreditNoteForClearance,
+  submitDebitNoteForClearance,
+  submitInvoiceForClearance,
+} from "../clearance/service";
 import { creditNoteToApi, debitNoteToApi, loadInvoiceDetail } from "./invoices";
 import { writeAudit } from "../audit";
 import { notFound, validationError } from "../lib/errors";
 import { paramId, queryString } from "../lib/params";
 import { parsePagination } from "../lib/pagination";
+import { postInvoiceIssueJournalEntry } from "../lib/receivablesGlPostings";
 
 export const clearanceRouter = Router();
 const MODULE = "clearance";
@@ -24,9 +32,14 @@ const provider = createClearanceProvider();
 function notEligibleMessage(status: string, clearanceStatus: string): string {
   if (clearanceStatus === "cleared") return "This document has already cleared.";
   if (clearanceStatus === "rejected") {
-    return "This document was rejected by the clearance provider. Correcting and resubmitting a rejected document is not supported yet.";
+    return "This document was rejected by the clearance provider. Call its correct-and-resubmit endpoint first to reopen it for another attempt.";
   }
   return `Not eligible for clearance submission (status=${status}, clearanceStatus=${clearanceStatus}).`;
+}
+
+function notRejectedMessage(clearanceStatus: string): string {
+  if (clearanceStatus === "cleared") return "This document has already cleared — there is nothing to correct.";
+  return `Only a rejected document can be corrected and resubmitted (current clearance status: ${clearanceStatus}).`;
 }
 
 clearanceRouter.post(
@@ -49,6 +62,21 @@ clearanceRouter.post(
     res.status(200).json(body!);
   },
 );
+
+clearanceRouter.post("/invoices/:id/correct-and-resubmit", requireAuth, requirePermission(MODULE, "create"), idempotent(), async (req, res) => {
+  const id = paramId(req);
+  const result = await correctAndResubmitInvoice(req.auth!.companyId, req.auth!.userId, id);
+  if (result.kind === "not_found") {
+    res.status(404).json(notFound("Invoice"));
+    return;
+  }
+  if (result.kind === "not_rejected") {
+    res.status(400).json(validationError({ status: notRejectedMessage(result.clearanceStatus) }));
+    return;
+  }
+  const body = await withTenant(db, req.auth!.companyId, (tx) => loadInvoiceDetail(tx, id));
+  res.status(200).json(body!);
+});
 
 clearanceRouter.post("/invoices/:id/issue", requireAuth, requirePermission(MODULE, "create"), async (req, res) => {
   const id = paramId(req);
@@ -82,6 +110,23 @@ clearanceRouter.post("/invoices/:id/issue", requireAuth, requirePermission(MODUL
       before,
       after,
     });
+
+    // Revenue recognition happens at issue, not at clearance — clearance is
+    // a fiscal-authority formality (DOMAIN.md), issue is when the
+    // customer is actually billed and the receivable becomes real. See
+    // docs/JOFOTARA-OPEN-QUESTIONS.md and the flagged finance decisions in
+    // the completion report for where this timing choice needs sign-off.
+    await postInvoiceIssueJournalEntry(
+      tx,
+      req.auth!.companyId,
+      before.branchId,
+      new Date(),
+      id,
+      after.invoiceNumber,
+      fils(after.subtotalFils),
+      fils(after.taxFils),
+      fils(after.totalFils),
+    );
     return { kind: "ok" as const };
   });
 
@@ -117,6 +162,36 @@ clearanceRouter.post(
     res.status(200).json(creditNoteToApi(row!));
   },
 );
+
+clearanceRouter.post("/credit-notes/:id/correct-and-resubmit", requireAuth, requirePermission(MODULE, "create"), idempotent(), async (req, res) => {
+  const id = paramId(req);
+  const result = await correctAndResubmitCreditNote(req.auth!.companyId, req.auth!.userId, id);
+  if (result.kind === "not_found") {
+    res.status(404).json(notFound("Credit note"));
+    return;
+  }
+  if (result.kind === "not_rejected") {
+    res.status(400).json(validationError({ status: notRejectedMessage(result.clearanceStatus) }));
+    return;
+  }
+  const [row] = await withTenant(db, req.auth!.companyId, (tx) => tx.select().from(creditNote).where(eq(creditNote.id, id)));
+  res.status(200).json(creditNoteToApi(row!));
+});
+
+clearanceRouter.post("/debit-notes/:id/correct-and-resubmit", requireAuth, requirePermission(MODULE, "create"), idempotent(), async (req, res) => {
+  const id = paramId(req);
+  const result = await correctAndResubmitDebitNote(req.auth!.companyId, req.auth!.userId, id);
+  if (result.kind === "not_found") {
+    res.status(404).json(notFound("Debit note"));
+    return;
+  }
+  if (result.kind === "not_rejected") {
+    res.status(400).json(validationError({ status: notRejectedMessage(result.clearanceStatus) }));
+    return;
+  }
+  const [row] = await withTenant(db, req.auth!.companyId, (tx) => tx.select().from(debitNote).where(eq(debitNote.id, id)));
+  res.status(200).json(debitNoteToApi(row!));
+});
 
 clearanceRouter.post(
   "/debit-notes/:id/submit-for-clearance",
@@ -154,6 +229,10 @@ type QueueRow = {
   clearanceError: string | null;
   createdAt: Date;
 };
+
+clearanceRouter.get("/clearance-provider-info", requireAuth, (_req, res) => {
+  res.status(200).json({ simulated: isClearanceSimulated(), providerName: isClearanceSimulated() ? "mock" : "jofotara" });
+});
 
 clearanceRouter.get("/clearance-queue", requireAuth, requirePermission(MODULE, "view"), async (req, res) => {
   const pagination = parsePagination(req);

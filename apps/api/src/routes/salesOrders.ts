@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
+  deliveryOrder,
   salesOrder,
   salesOrderLine,
   salesOrderLineCharge,
@@ -16,6 +17,7 @@ import {
   evaluateCreditCheck,
   fils,
   filsToJodString,
+  milliUnitsToDecimalString,
   type Fils,
 } from "@rmixerp/core";
 import {
@@ -90,7 +92,8 @@ function chargeToApi(row: SalesOrderLineChargeRow): LineCharge {
   };
 }
 
-function lineToApi(row: SalesOrderLineRow, charges: SalesOrderLineChargeRow[]): SalesOrderLine {
+function lineToApi(row: SalesOrderLineRow, charges: SalesOrderLineChargeRow[], deliveredMilli: bigint): SalesOrderLine {
+  const orderedMilli = decimalStringToMilliUnits(row.quantityM3);
   return {
     id: row.id,
     companyId: row.companyId,
@@ -106,6 +109,8 @@ function lineToApi(row: SalesOrderLineRow, charges: SalesOrderLineChargeRow[]): 
     taxJod: filsToJodString(fils(row.taxFils)),
     totalJod: filsToJodString(fils(row.totalFils)),
     charges: charges.map(chargeToApi),
+    deliveredQuantityM3: milliUnitsToDecimalString(deliveredMilli),
+    remainingQuantityM3: milliUnitsToDecimalString(orderedMilli - deliveredMilli),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     voidedAt: row.voidedAt?.toISOString() ?? null,
@@ -141,7 +146,27 @@ export async function loadSalesOrderWithLines(tx: Tx, id: string): Promise<Sales
     arr.push(c);
     chargesByLine.set(c.salesOrderLineId, arr);
   }
-  return { ...toApi(row), lines: lines.map((l) => lineToApi(l, chargesByLine.get(l.id) ?? [])) };
+  const deliveredByLine = await loadDeliveredMilliByLine(tx, lineIds);
+  return {
+    ...toApi(row),
+    lines: lines.map((l) => lineToApi(l, chargesByLine.get(l.id) ?? [], deliveredByLine.get(l.id) ?? 0n)),
+  };
+}
+
+/** Every non-voided delivery order against each line counts toward "delivered," regardless of its own status — a `planned` delivery already reserves that quantity against the line, not just a `delivered`/`invoiced` one. */
+async function loadDeliveredMilliByLine(tx: Tx, lineIds: string[]): Promise<Map<string, bigint>> {
+  const deliveredByLine = new Map<string, bigint>();
+  if (lineIds.length === 0) return deliveredByLine;
+  const rows = await tx
+    .select({ salesOrderLineId: deliveryOrder.salesOrderLineId, quantityM3: deliveryOrder.quantityM3 })
+    .from(deliveryOrder)
+    .where(and(inArray(deliveryOrder.salesOrderLineId, lineIds), isNull(deliveryOrder.voidedAt)));
+  for (const r of rows) {
+    if (!r.salesOrderLineId) continue;
+    const prior = deliveredByLine.get(r.salesOrderLineId) ?? 0n;
+    deliveredByLine.set(r.salesOrderLineId, prior + decimalStringToMilliUnits(r.quantityM3));
+  }
+  return deliveredByLine;
 }
 
 async function recomputeLine(tx: Tx, lineId: string): Promise<void> {
@@ -175,12 +200,14 @@ salesOrdersRouter.get("/sales-orders", requireAuth, requirePermission(MODULE, "v
   const pagination = parsePagination(req);
   const status = queryString(req, "status");
   const customerId = queryString(req, "customerId");
+  const branchId = queryString(req, "branchId");
 
   const { items, total } = await withTenant(db, req.auth!.companyId, async (tx) => {
     const where = and(
       isNull(salesOrder.voidedAt),
       status ? eq(salesOrder.status, status as SalesOrderRow["status"]) : undefined,
       customerId ? eq(salesOrder.customerId, customerId) : undefined,
+      branchId ? eq(salesOrder.branchId, branchId) : undefined,
     );
     const [rows, countRows] = await Promise.all([
       tx.select().from(salesOrder).where(where).orderBy(desc(salesOrder.createdAt), salesOrder.id).limit(pagination.limit).offset(pagination.offset),

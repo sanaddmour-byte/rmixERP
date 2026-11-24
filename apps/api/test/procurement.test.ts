@@ -161,6 +161,26 @@ describe("purchase orders", () => {
     expect(approveRes.body.status).toBe("approved");
   });
 
+  it("400s a malformed unitPriceJod on a new line instead of 500ing (the review's malformed-money-string finding, generalized beyond the one customers.ts instance)", async () => {
+    const poRes = await request(app).post("/api/purchase-orders").set("Authorization", `Bearer ${admin}`).send({ branchId, vendorId });
+    const res = await request(app)
+      .post(`/api/purchase-orders/${poRes.body.id}/lines`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ rawMaterialId, quantity: "10", unitPriceJod: "not-a-price" });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("validation_error");
+  });
+
+  it("400s a malformed quantity on a new line instead of 500ing", async () => {
+    const poRes = await request(app).post("/api/purchase-orders").set("Authorization", `Bearer ${admin}`).send({ branchId, vendorId });
+    const res = await request(app)
+      .post(`/api/purchase-orders/${poRes.body.id}/lines`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ rawMaterialId, quantity: "1.23456789", unitPriceJod: "5.000" });
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe("validation_error");
+  });
+
   it("rejects a submitted purchase order with a reason", async () => {
     const poRes = await request(app).post("/api/purchase-orders").set("Authorization", `Bearer ${admin}`).send({ branchId, vendorId });
     const poId = poRes.body.id;
@@ -299,6 +319,130 @@ describe("vendor bills", () => {
       .set("Authorization", `Bearer ${admin}`)
       .send({ purchaseOrderId: poId, dueDate: "2026-08-01T00:00:00.000Z", lines: [{ purchaseOrderLineId: poLineId, description: "Cement", quantity: "10" }] });
     expect(res.status).toBe(400);
+  });
+
+  it("tracks ordered/accepted/billed independently: a bill cannot exceed what was received, and a partial bill never prematurely closes the PO", async () => {
+    const freshVendorId = await createVendor();
+    const materialRes = await request(app)
+      .post("/api/raw-materials")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ name: "Rebar", code: `REB-${Date.now()}`, unit: "ton" });
+    const freshRawMaterialId = materialRes.body.id as string;
+
+    const poRes = await request(app).post("/api/purchase-orders").set("Authorization", `Bearer ${admin}`).send({ branchId, vendorId: freshVendorId });
+    const poId = poRes.body.id as string;
+    const lineRes = await request(app)
+      .post(`/api/purchase-orders/${poId}/lines`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ rawMaterialId: freshRawMaterialId, quantity: "10", unitPriceJod: "5.000" });
+    const poLineId = lineRes.body.lines[0].id as string;
+    await request(app).post(`/api/purchase-orders/${poId}/submit`).set("Authorization", `Bearer ${admin}`).send();
+    await request(app).post(`/api/purchase-orders/${poId}/approve`).set("Authorization", `Bearer ${admin}`).send();
+
+    // Order 10, receive 2.
+    const gr1 = await request(app)
+      .post("/api/goods-receipts")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ purchaseOrderId: poId, lines: [{ purchaseOrderLineId: poLineId, quantityReceived: "2" }] });
+    expect(gr1.status).toBe(201);
+
+    let poState = await request(app).get(`/api/purchase-orders/${poId}`).set("Authorization", `Bearer ${admin}`);
+    expect(poState.body.status).toBe("received");
+    expect(poState.body.lines[0].receivedQuantity).toBe("2.000");
+    expect(poState.body.lines[0].billedQuantity).toBe("0.000");
+    expect(poState.body.lines[0].remainingBillableQuantity).toBe("2.000");
+
+    // Reject a bill for the full 10 — only 2 have actually arrived.
+    const rejectedBill = await request(app)
+      .post("/api/vendor-bills")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ purchaseOrderId: poId, dueDate: "2026-09-01T00:00:00.000Z", lines: [{ purchaseOrderLineId: poLineId, description: "Rebar", quantity: "10" }] });
+    expect(rejectedBill.status).toBe(400);
+
+    // Bill exactly the 2 received.
+    const bill1 = await request(app)
+      .post("/api/vendor-bills")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ purchaseOrderId: poId, dueDate: "2026-09-01T00:00:00.000Z", lines: [{ purchaseOrderLineId: poLineId, description: "Rebar", quantity: "2" }] });
+    expect(bill1.status).toBe(201);
+
+    // The PO must stay "received", not jump to "billed" — the review's
+    // other reported bug: one partial bill closed the whole PO, a
+    // terminal status, blocking the remaining receipt.
+    poState = await request(app).get(`/api/purchase-orders/${poId}`).set("Authorization", `Bearer ${admin}`);
+    expect(poState.body.status).toBe("received");
+    expect(poState.body.lines[0].billedQuantity).toBe("2.000");
+    expect(poState.body.lines[0].remainingBillableQuantity).toBe("0.000");
+
+    // Receive the remaining 8 — must not be blocked by the earlier partial bill.
+    const gr2 = await request(app)
+      .post("/api/goods-receipts")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ purchaseOrderId: poId, lines: [{ purchaseOrderLineId: poLineId, quantityReceived: "8" }] });
+    expect(gr2.status).toBe(201);
+
+    poState = await request(app).get(`/api/purchase-orders/${poId}`).set("Authorization", `Bearer ${admin}`);
+    expect(poState.body.status).toBe("received");
+    expect(poState.body.lines[0].receivedQuantity).toBe("10.000");
+    expect(poState.body.lines[0].remainingBillableQuantity).toBe("8.000");
+
+    // Bill the remaining 8 — only now does the PO close out.
+    const bill2 = await request(app)
+      .post("/api/vendor-bills")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ purchaseOrderId: poId, dueDate: "2026-09-01T00:00:00.000Z", lines: [{ purchaseOrderLineId: poLineId, description: "Rebar", quantity: "8" }] });
+    expect(bill2.status).toBe(201);
+
+    poState = await request(app).get(`/api/purchase-orders/${poId}`).set("Authorization", `Bearer ${admin}`);
+    expect(poState.body.status).toBe("billed");
+    expect(poState.body.lines[0].billedQuantity).toBe("10.000");
+    expect(poState.body.lines[0].remainingBillableQuantity).toBe("0.000");
+
+    // Stock reflects both receipts (2 + 8 = 10), tracked independently of billing.
+    const stockRes = await request(app)
+      .get("/api/stock-balances")
+      .query({ branchId, rawMaterialId: freshRawMaterialId })
+      .set("Authorization", `Bearer ${admin}`);
+    expect(stockRes.body.items[0].quantityOnHand).toBe("10.000");
+
+    // Each bill posts its own balanced GL entry when approved.
+    const approve1 = await request(app).post(`/api/vendor-bills/${bill1.body.id}/approve`).set("Authorization", `Bearer ${admin}`).send();
+    const approve2 = await request(app).post(`/api/vendor-bills/${bill2.body.id}/approve`).set("Authorization", `Bearer ${admin}`).send();
+    expect(approve1.status).toBe(200);
+    expect(approve2.status).toBe(200);
+    const journalRes = await request(app)
+      .get("/api/gl/journal-entries")
+      .query({ sourceDocumentType: "vendor_bill", pageSize: 200 })
+      .set("Authorization", `Bearer ${admin}`);
+    const entryIds = journalRes.body.items.map((e: { sourceDocumentId: string }) => e.sourceDocumentId);
+    expect(entryIds).toContain(bill1.body.id);
+    expect(entryIds).toContain(bill2.body.id);
+  });
+
+  it("400s a bill whose own repeated line entries together exceed what remains unbilled, even though no single entry does", async () => {
+    const { poId, poLineId } = await createApprovedPurchaseOrder(vendorId, "10", "5.000");
+    await request(app)
+      .post("/api/goods-receipts")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ purchaseOrderId: poId, lines: [{ purchaseOrderLineId: poLineId, quantityReceived: "10" }] });
+
+    // Two entries against the same line, 6 + 6 = 12 > 10 received, even though neither alone exceeds it.
+    const res = await request(app)
+      .post("/api/vendor-bills")
+      .set("Authorization", `Bearer ${admin}`)
+      .send({
+        purchaseOrderId: poId,
+        dueDate: "2026-08-01T00:00:00.000Z",
+        lines: [
+          { purchaseOrderLineId: poLineId, description: "Cement (partial)", quantity: "6" },
+          { purchaseOrderLineId: poLineId, description: "Cement (remainder)", quantity: "6" },
+        ],
+      });
+    expect(res.status).toBe(400);
+
+    // Nothing should have been written — the PO's billed quantity for the line stays zero.
+    const poState = await request(app).get(`/api/purchase-orders/${poId}`).set("Authorization", `Bearer ${admin}`);
+    expect(poState.body.lines[0].billedQuantity).toBe("0.000");
   });
 
   it("400s approving a bill that isn't draft", async () => {

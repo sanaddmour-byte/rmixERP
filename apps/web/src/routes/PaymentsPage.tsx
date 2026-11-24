@@ -12,6 +12,7 @@ import {
 } from "@rmixerp/contract";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@rmixerp/ui";
 import { useModulePermissions } from "../lib/usePermissions";
+import { ClickableRow } from "../components/ClickableRow";
 
 type Method = CreatePaymentRequestMethod;
 type AllocationMode = CreatePaymentRequestAllocationMode;
@@ -271,17 +272,18 @@ export function PaymentsPage() {
             </thead>
             <tbody>
               {body?.items.map((row) => (
-                <tr
+                <ClickableRow
                   key={row.id}
-                  className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800"
-                  onClick={() => setSelectedId(row.id)}
+                  onActivate={() => setSelectedId(row.id)}
+                  aria-label={`Payment ${row.receiptNumber}`}
+                  className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-orange-600"
                 >
                   <td className="py-2 pe-4">{row.receiptNumber}</td>
                   <td className="py-2 pe-4">{vendorById.get(row.vendorId) ?? row.vendorId}</td>
                   <td className="py-2 pe-4 capitalize">{row.method.replace(/_/g, " ")}</td>
                   <td className="py-2 pe-4">{row.amountJod}</td>
                   <td className="py-2 pe-4">{new Date(row.paidAt).toLocaleDateString()}</td>
-                </tr>
+                </ClickableRow>
               ))}
             </tbody>
           </table>

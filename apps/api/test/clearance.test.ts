@@ -6,7 +6,7 @@ import { invoice, withTenant } from "@rmixerp/db";
 import { createApp } from "../src/app";
 import { db } from "../src/db";
 import { config } from "../src/config";
-import { submitInvoiceForClearance } from "../src/clearance/service";
+import { correctAndResubmitCreditNote, correctAndResubmitInvoice, submitCreditNoteForClearance, submitInvoiceForClearance } from "../src/clearance/service";
 import { adminToken } from "./testAuth";
 
 /** Always fails with a transport error — exercises the retry/backoff path without a real network call. */
@@ -14,6 +14,15 @@ class AlwaysTransportErrorProvider implements ClearanceProvider {
   async submit(_input: ClearanceSubmissionInput): Promise<ClearanceOutcome> {
     await Promise.resolve();
     return { kind: "transport_error", reason: "simulated network failure" };
+  }
+}
+
+/** Always rejects on business grounds — exercises the correction/resubmission path without a real network call. */
+class AlwaysRejectedProvider implements ClearanceProvider {
+  constructor(private readonly reason = "simulated business rejection") {}
+  async submit(_input: ClearanceSubmissionInput): Promise<ClearanceOutcome> {
+    await Promise.resolve();
+    return { kind: "rejected", reason: this.reason, responsePayload: { mock: true, reason: this.reason } };
   }
 }
 
@@ -245,5 +254,100 @@ describe("transport-failure retry accounting (CLAUDE.md: bounded exponential-bac
     expect(afterRecovery!.status).toBe("cleared");
     expect(afterRecovery!.clearanceStatus).toBe("cleared");
     expect(afterRecovery!.clearanceIcv).toBe(icvAfterFirst);
+  });
+});
+
+describe("rejected-document correction and resubmission", () => {
+  it("reopens a rejected invoice for another attempt, then clears normally once resubmitted", async () => {
+    const invoiceId = await createDraftInvoice("1");
+    const rejecting = new AlwaysRejectedProvider("missing seller tax number");
+
+    const rejectedOutcome = await submitInvoiceForClearance(rejecting, config.companyId, null, invoiceId);
+    expect(rejectedOutcome).toEqual({ kind: "ok" });
+    const [afterReject] = await withTenant(db, config.companyId, (tx) => tx.select().from(invoice).where(eq(invoice.id, invoiceId)));
+    expect(afterReject!.status).toBe("rejected");
+    expect(afterReject!.clearanceStatus).toBe("rejected");
+    expect(afterReject!.clearanceError).toBe("missing seller tax number");
+    const icvAfterReject = afterReject!.clearanceIcv;
+
+    // Resubmitting directly while still rejected is refused with a pointer to the correction endpoint.
+    const stillRejected = await request(app).post(`/api/invoices/${invoiceId}/submit-for-clearance`).set("Authorization", `Bearer ${admin}`).send();
+    expect(stillRejected.status).toBe(400);
+
+    const corrected = await correctAndResubmitInvoice(config.companyId, null, invoiceId);
+    expect(corrected.kind).toBe("ok");
+    const [afterCorrection] = await withTenant(db, config.companyId, (tx) => tx.select().from(invoice).where(eq(invoice.id, invoiceId)));
+    expect(afterCorrection!.status).toBe("draft");
+    expect(afterCorrection!.clearanceStatus).toBe("pending");
+    expect(afterCorrection!.clearanceAttempts).toBe(0);
+    expect(afterCorrection!.clearanceError).toBeNull();
+    // Same ICV reused — it identifies the fiscal document, not the attempt, even across a correction.
+    expect(afterCorrection!.clearanceIcv).toBe(icvAfterReject);
+
+    const resubmitRes = await request(app).post(`/api/invoices/${invoiceId}/submit-for-clearance`).set("Authorization", `Bearer ${admin}`).send();
+    expect(resubmitRes.status).toBe(200);
+    expect(resubmitRes.body.status).toBe("cleared");
+    expect(resubmitRes.body.clearanceIcv).toBe(icvAfterReject);
+  });
+
+  it("400s correcting an invoice that was never rejected", async () => {
+    const invoiceId = await createDraftInvoice("1");
+    const result = await correctAndResubmitInvoice(config.companyId, null, invoiceId);
+    expect(result.kind).toBe("not_rejected");
+
+    const res = await request(app).post(`/api/invoices/${invoiceId}/correct-and-resubmit`).set("Authorization", `Bearer ${admin}`).send();
+    expect(res.status).toBe(400);
+  });
+
+  it("404s correcting a nonexistent invoice", async () => {
+    const res = await request(app)
+      .post("/api/invoices/00000000-0000-4000-8000-000000000099/correct-and-resubmit")
+      .set("Authorization", `Bearer ${admin}`)
+      .send();
+    expect(res.status).toBe(404);
+  });
+
+  it("reopens a rejected credit note for another attempt via the HTTP route", async () => {
+    const invoiceId = await createDraftInvoice("2");
+    await request(app).post(`/api/invoices/${invoiceId}/submit-for-clearance`).set("Authorization", `Bearer ${admin}`).send();
+    const creditRes = await request(app)
+      .post(`/api/invoices/${invoiceId}/credit-notes`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ amountJod: "5.000", reason: "Pricing correction" });
+    const creditNoteId = creditRes.body.creditNotes[0].id as string;
+
+    const rejecting = new AlwaysRejectedProvider("bad line description");
+    const rejectedOutcome = await submitCreditNoteForClearance(rejecting, config.companyId, null, creditNoteId);
+    expect(rejectedOutcome).toEqual({ kind: "ok" });
+
+    const correctRes = await request(app).post(`/api/credit-notes/${creditNoteId}/correct-and-resubmit`).set("Authorization", `Bearer ${admin}`).send();
+    expect(correctRes.status).toBe(200);
+    expect(correctRes.body.clearanceStatus).toBe("pending");
+
+    const resubmitRes = await request(app).post(`/api/credit-notes/${creditNoteId}/submit-for-clearance`).set("Authorization", `Bearer ${admin}`).send();
+    expect(resubmitRes.status).toBe(200);
+    expect(resubmitRes.body.clearanceStatus).toBe("cleared");
+  });
+
+  it("400s correcting a credit note that was never rejected", async () => {
+    const invoiceId = await createDraftInvoice("2");
+    await request(app).post(`/api/invoices/${invoiceId}/submit-for-clearance`).set("Authorization", `Bearer ${admin}`).send();
+    const creditRes = await request(app)
+      .post(`/api/invoices/${invoiceId}/credit-notes`)
+      .set("Authorization", `Bearer ${admin}`)
+      .send({ amountJod: "5.000", reason: "Pricing correction" });
+    const creditNoteId = creditRes.body.creditNotes[0].id as string;
+
+    const result = await correctAndResubmitCreditNote(config.companyId, null, creditNoteId);
+    expect(result.kind).toBe("not_rejected");
+  });
+});
+
+describe("clearance provider info", () => {
+  it("reports the simulated mock provider in test/dev (no CLEARANCE_PROVIDER=jofotara configured)", async () => {
+    const res = await request(app).get("/api/clearance-provider-info").set("Authorization", `Bearer ${admin}`);
+    expect(res.status).toBe(200);
+    expect(res.body.simulated).toBe(true);
+    expect(res.body.providerName).toBe("mock");
   });
 });

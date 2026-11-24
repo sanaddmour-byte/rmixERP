@@ -10,9 +10,10 @@ import {
   withTenant,
   type Tx,
 } from "@rmixerp/db";
-import { assertInvoiceTransition, computeRetryDelayMs, type ClearanceOutcome, type ClearanceProvider } from "@rmixerp/core";
+import { assertInvoiceTransition, computeRetryDelayMs, fils, type ClearanceOutcome, type ClearanceProvider } from "@rmixerp/core";
 import { db } from "../db";
 import { writeAudit } from "../audit";
+import { postNoteClearanceJournalEntry } from "../lib/receivablesGlPostings";
 import { buildUblInvoiceXml } from "./ubl";
 import { toUblInvoiceInput } from "./jofotara/mapping";
 
@@ -136,6 +137,96 @@ async function persistInvoiceOutcome(companyId: string, actorUserId: string | nu
       after,
     });
   });
+}
+
+export type CorrectionResult<TRow> = { kind: "not_found" } | { kind: "not_rejected"; status: string; clearanceStatus: string } | { kind: "ok"; row: TRow };
+
+/**
+ * Reopens a clearance-rejected invoice for another submission attempt —
+ * the "rejected -> draft" edge DOMAIN.md's own state machine already
+ * allows but no route ever wired up. Resets the attempt counter (a
+ * correction starts a fresh retry/backoff cycle, not a continuation of
+ * the failed one) and clears the error, but deliberately does *not*
+ * touch `clearanceIcv` (still the document's fixed identity, reused on
+ * resubmission) or the previous `clearanceResponsePayload`/
+ * `clearanceSubmittedPayload` (left as forensic history until the next
+ * submission outcome overwrites them).
+ *
+ * This only reopens the submission path. It cannot fix *why* the
+ * document was rejected — this system has no capability to edit an
+ * invoice's own line items/amounts once created (Phase 6's invoicing
+ * flow never built one), so a rejection caused by the fiscal data itself
+ * needs that corrected upstream (e.g. the customer's tax number) before
+ * calling this and resubmitting.
+ */
+export async function correctAndResubmitInvoice(companyId: string, actorUserId: string | null, invoiceId: string): Promise<CorrectionResult<InvoiceRow>> {
+  return withTenant(db, companyId, async (tx) => {
+    const [before] = await tx.select().from(invoice).where(and(eq(invoice.id, invoiceId), isNull(invoice.voidedAt))).for("update");
+    if (!before) return { kind: "not_found" as const };
+    if (before.status !== "rejected" || before.clearanceStatus !== "rejected") {
+      return { kind: "not_rejected" as const, status: before.status, clearanceStatus: before.clearanceStatus };
+    }
+    assertInvoiceTransition(before.status, "draft");
+    const [after] = await tx
+      .update(invoice)
+      .set({ status: "draft", clearanceStatus: "pending", clearanceAttempts: 0, clearanceError: null, clearanceNextRetryAt: null })
+      .where(eq(invoice.id, invoiceId))
+      .returning();
+    if (!after) throw new Error("invoice correction update returned no row");
+    await writeAudit(tx, {
+      companyId,
+      branchId: before.branchId,
+      actorUserId,
+      entityType: "invoice",
+      entityId: invoiceId,
+      action: "clearance:correction",
+      before,
+      after,
+    });
+    return { kind: "ok" as const, row: after };
+  });
+}
+
+/** Shared by credit-note/debit-note correction — neither has an independent document status, so only `clearanceStatus` resets (no draft gate to re-open). */
+async function correctAndResubmitNote(
+  table: typeof creditNote | typeof debitNote,
+  documentType: "credit_note" | "debit_note",
+  companyId: string,
+  actorUserId: string | null,
+  noteId: string,
+): Promise<CorrectionResult<CreditNoteRow | DebitNoteRow>> {
+  return withTenant(db, companyId, async (tx) => {
+    const [before] = await tx.select().from(table).where(and(eq(table.id, noteId), isNull(table.voidedAt))).for("update");
+    if (!before) return { kind: "not_found" as const };
+    if (before.clearanceStatus !== "rejected") {
+      return { kind: "not_rejected" as const, status: "n/a", clearanceStatus: before.clearanceStatus };
+    }
+    const [after] = await tx
+      .update(table)
+      .set({ clearanceStatus: "pending", clearanceAttempts: 0, clearanceError: null, clearanceNextRetryAt: null })
+      .where(eq(table.id, noteId))
+      .returning();
+    if (!after) throw new Error(`${documentType} correction update returned no row`);
+    await writeAudit(tx, {
+      companyId,
+      branchId: before.branchId,
+      actorUserId,
+      entityType: documentType,
+      entityId: noteId,
+      action: "clearance:correction",
+      before,
+      after,
+    });
+    return { kind: "ok" as const, row: after };
+  });
+}
+
+export function correctAndResubmitCreditNote(companyId: string, actorUserId: string | null, id: string) {
+  return correctAndResubmitNote(creditNote, "credit_note", companyId, actorUserId, id);
+}
+
+export function correctAndResubmitDebitNote(companyId: string, actorUserId: string | null, id: string) {
+  return correctAndResubmitNote(debitNote, "debit_note", companyId, actorUserId, id);
 }
 
 export type SubmitOutcome = ReservationResult<unknown> | { kind: "ok" };
@@ -263,6 +354,24 @@ async function submitNoteForClearance(
           clearanceNextRetryAt: null,
         })
         .where(eq(table.id, noteId));
+
+      // A note has no independent lifecycle beyond clearance (unlike an
+      // invoice's separate cleared->issued step) — clearing IS the moment
+      // it becomes a real adjustment to what the customer owes, so this
+      // is where it posts. A credit note reverses revenue/tax and reduces
+      // the receivable; a debit note mirrors an invoice.
+      await postNoteClearanceJournalEntry(
+        tx,
+        companyId,
+        before.branchId,
+        new Date(),
+        documentType,
+        noteId,
+        before.noteNumber,
+        fils(before.amountFils),
+        fils(before.taxFils),
+        fils(before.totalFils),
+      );
     } else if (outcome.kind === "rejected") {
       await tx
         .update(table)

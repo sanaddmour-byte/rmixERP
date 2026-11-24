@@ -1,0 +1,1 @@
+ALTER TABLE "journal_entry" ADD CONSTRAINT "journal_entry_company_source_document_unique" UNIQUE("company_id","source_document_type","source_document_id");

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useSearchParams } from "wouter";
 import {
   useGetCubeTestTraceability,
   useListAllCubeTestSets,
@@ -7,6 +8,7 @@ import {
 } from "@rmixerp/contract";
 import { Button, Card, CardContent, CardHeader, CardTitle } from "@rmixerp/ui";
 import { NotificationsPanel } from "../components/NotificationsPanel";
+import { ClickableRow } from "../components/ClickableRow";
 
 function CubeTestDetail({ id }: { id: string }) {
   const detail = useGetCubeTestTraceability(id);
@@ -40,8 +42,11 @@ function CubeTestDetail({ id }: { id: string }) {
 }
 
 export function QCPage() {
+  const [searchParams] = useSearchParams();
   const [page, setPage] = React.useState(1);
-  const [result, setResult] = React.useState<ListAllCubeTestSetsResult | "">("");
+  const [result, setResult] = React.useState<ListAllCubeTestSetsResult | "">(
+    () => (searchParams.get("result") as ListAllCubeTestSetsResult | null) ?? "",
+  );
   const [branchId, setBranchId] = React.useState("");
   const [expandedId, setExpandedId] = React.useState<string | null>(null);
 
@@ -119,9 +124,10 @@ export function QCPage() {
               )}
               {body?.items.map((item) => (
                 <React.Fragment key={item.id}>
-                  <tr
-                    className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800"
-                    onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                  <ClickableRow
+                    onActivate={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                    aria-label={`Cube test set for batch ${item.batchNumber}`}
+                    className="cursor-pointer border-b border-navy-100 dark:border-navy-800 hover:bg-navy-50 dark:hover:bg-navy-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-orange-600"
                   >
                     <td className="py-2 pe-4">{item.batchNumber}</td>
                     <td className="py-2 pe-4">{item.mixDesignName}</td>
@@ -140,7 +146,7 @@ export function QCPage() {
                         {item.pass === null ? "Pending" : item.pass ? "Pass" : "Fail"}
                       </span>
                     </td>
-                  </tr>
+                  </ClickableRow>
                   {expandedId === item.id && (
                     <tr>
                       <td colSpan={5} className="pb-3">

@@ -1,13 +1,16 @@
 import { Router, type Request, type Response } from "express";
-import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import {
   appUser,
   branch,
   collection,
   collectionAllocation,
+  creditNote,
   customer,
+  debitNote,
   deliveryOrder,
   invoice,
+  journalEntry,
   postDatedCheque,
   salesOrder,
   withTenant,
@@ -28,12 +31,14 @@ import {
   type Fils,
 } from "@rmixerp/core";
 import {
+  BackfillReceivablesGlPostingsBody,
   BouncePostDatedChequeBody,
   CreateCollectionBody,
   type Collection,
   type CollectionAllocationItem,
   type CollectionDetail,
   type PostDatedCheque as PostDatedChequeApi,
+  type ReconcileReceivablesGlPostingsResponse,
 } from "@rmixerp/contract";
 import { db } from "../db";
 import { requireAuth } from "../middleware/requireAuth";
@@ -45,12 +50,20 @@ import { paramId, queryString } from "../lib/params";
 import { sendCsv } from "../lib/csv";
 import { writeAudit } from "../audit";
 import { computeOutstandingInvoiceExposure } from "../lib/creditExposure";
+import {
+  postCollectionJournalEntry,
+  postInvoiceIssueJournalEntry,
+  postNoteClearanceJournalEntry,
+  postPdcClearJournalEntry,
+  postPdcReversalJournalEntry,
+} from "../lib/receivablesGlPostings";
 import { allocateDocumentNumber } from "./invoices";
 
 export const receivablesRouter = Router();
 const COLLECTIONS_MODULE = "collections";
 const PDC_MODULE = "postDatedCheques";
 const REPORTS_MODULE = "receivablesReports";
+const JOURNAL_MODULE = "glJournal";
 
 type CollectionRow = typeof collection.$inferSelect;
 type CollectionAllocationRow = typeof collectionAllocation.$inferSelect;
@@ -285,6 +298,24 @@ receivablesRouter.post(
         });
       }
 
+      // The allocation against invoices applies immediately at creation
+      // regardless of method (Phase 8's documented design — a PDC's own
+      // clear/bounce only matters to the cheque's own lifecycle, not to
+      // when the receivable is considered reduced), so the GL mirrors
+      // that: debit Cash for money in hand now, or a separate "PDC in
+      // Hand" asset for a cheque that isn't bankable yet — never Cash
+      // for a cheque, which would overstate actual cash on hand.
+      await postCollectionJournalEntry(
+        tx,
+        req.auth!.companyId,
+        input.branchId,
+        new Date(input.receivedAt),
+        collectionRow.id,
+        receiptNumber,
+        input.method,
+        amountFils,
+      );
+
       for (const line of planLines) {
         await tx.insert(collectionAllocation).values({
           companyId: req.auth!.companyId,
@@ -444,12 +475,36 @@ async function transitionPdc(
   res.status(200).json(pdcToApi(row!));
 }
 
+/** The PDC-in-Hand <-> Cash reclassification (clear) or reversal back to Accounts Receivable (bounce/cancel) — the GL side of a PDC's own lifecycle, independent of the allocation unwind `transitionPdc` already does at the application layer for bounce/cancel. */
+async function postPdcTransition(tx: Tx, companyId: string, before: PdcRow, action: "clear" | "reverse"): Promise<void> {
+  const [collectionRow] = await tx.select().from(collection).where(eq(collection.id, before.collectionId));
+  if (!collectionRow) throw new Error("post-dated cheque references a missing collection");
+  const amountFils = fils(collectionRow.amountFils);
+  if (action === "clear") {
+    await postPdcClearJournalEntry(tx, companyId, before.branchId, new Date(), before.id, before.chequeNumber, amountFils);
+  } else {
+    // Bounced or cancelled: the cheque was never real money — reverse the
+    // original receipt entry so the receivable reopens in the GL exactly
+    // as it does in the application layer's own allocation unwind.
+    await postPdcReversalJournalEntry(tx, companyId, before.branchId, new Date(), before.id, before.chequeNumber, amountFils);
+  }
+}
+
 receivablesRouter.post("/post-dated-cheques/:id/deposit", requireAuth, requirePermission(PDC_MODULE, "edit"), (req, res) =>
   transitionPdc(req, res, "deposited", async () => ({ depositedAt: new Date() }), false),
 );
 
 receivablesRouter.post("/post-dated-cheques/:id/clear", requireAuth, requirePermission(PDC_MODULE, "edit"), (req, res) =>
-  transitionPdc(req, res, "cleared", async () => ({ clearedAt: new Date() }), false),
+  transitionPdc(
+    req,
+    res,
+    "cleared",
+    async (tx, before) => {
+      await postPdcTransition(tx, req.auth!.companyId, before, "clear");
+      return { clearedAt: new Date() };
+    },
+    false,
+  ),
 );
 
 receivablesRouter.post("/post-dated-cheques/:id/bounce", requireAuth, requirePermission(PDC_MODULE, "approve"), async (req, res) => {
@@ -458,12 +513,249 @@ receivablesRouter.post("/post-dated-cheques/:id/bounce", requireAuth, requirePer
     res.status(400).json(validationError(parsed.error.flatten()));
     return;
   }
-  await transitionPdc(req, res, "bounced", async () => ({ bouncedAt: new Date(), bounceReason: parsed.data.reason }), true);
+  await transitionPdc(
+    req,
+    res,
+    "bounced",
+    async (tx, before) => {
+      await postPdcTransition(tx, req.auth!.companyId, before, "reverse");
+      return { bouncedAt: new Date(), bounceReason: parsed.data.reason };
+    },
+    true,
+  );
 });
 
 receivablesRouter.post("/post-dated-cheques/:id/cancel", requireAuth, requirePermission(PDC_MODULE, "edit"), (req, res) =>
-  transitionPdc(req, res, "cancelled", async () => ({}), true),
+  transitionPdc(
+    req,
+    res,
+    "cancelled",
+    async (tx, before) => {
+      await postPdcTransition(tx, req.auth!.companyId, before, "reverse");
+      return {};
+    },
+    true,
+  ),
 );
+
+/**
+ * Backfill for receivables documents created, cleared, or transitioned
+ * before GL posting existed for that document type — the explicit
+ * "dry-run reconciliation and backfill procedure for existing records"
+ * the review asked for, mirroring P0-1's
+ * `/delivery-orders/reconcile-sales-order-line` pattern: audited, safe to
+ * re-run, `dryRun: true` by default. `postJournalEntry` itself is
+ * idempotent per (company, sourceDocumentType, sourceDocumentId), so
+ * calling the same posting recipe for a document that already has an
+ * entry is a safe no-op — but a true dry run must not insert anything,
+ * so this checks existence itself before deciding what to report.
+ *
+ * Requires `glJournal:approve` — this writes financial postings directly,
+ * not a document the application state machine would otherwise produce,
+ * so it should get the same sign-off as any other manual journal entry.
+ */
+receivablesRouter.post("/receivables/reconcile-gl-postings", requireAuth, requirePermission(JOURNAL_MODULE, "approve"), async (req, res) => {
+  const parsed = BackfillReceivablesGlPostingsBody.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json(validationError(parsed.error.flatten()));
+    return;
+  }
+  const dryRun = parsed.data.dryRun;
+
+  const result = await withTenant(db, req.auth!.companyId, async (tx) => {
+    const posted: ReconcileReceivablesGlPostingsResponse["posted"] = [];
+    let alreadyPosted = 0;
+
+    async function alreadyHasEntry(sourceDocumentType: string, sourceDocumentId: string): Promise<boolean> {
+      const [existing] = await tx
+        .select({ id: journalEntry.id })
+        .from(journalEntry)
+        .where(
+          and(
+            eq(journalEntry.companyId, req.auth!.companyId),
+            eq(journalEntry.sourceDocumentType, sourceDocumentType),
+            eq(journalEntry.sourceDocumentId, sourceDocumentId),
+          ),
+        );
+      return !!existing;
+    }
+
+    async function audit(entityType: string, entityId: string, branchId: string) {
+      await writeAudit(tx, {
+        companyId: req.auth!.companyId,
+        branchId,
+        actorUserId: req.auth!.userId,
+        entityType,
+        entityId,
+        action: "backfill:gl_posting",
+        reason: "Reconciliation backfill — POST /receivables/reconcile-gl-postings.",
+      });
+    }
+
+    // Invoices: revenue recognized at issue — any invoice that reached
+    // "issued" (or beyond) should have an "invoice" entry.
+    const invoiceRows = await tx
+      .select()
+      .from(invoice)
+      .where(and(isNull(invoice.voidedAt), inArray(invoice.status, ["issued", "partially_paid", "paid"])));
+    for (const row of invoiceRows) {
+      if (await alreadyHasEntry("invoice", row.id)) {
+        alreadyPosted += 1;
+        continue;
+      }
+      posted.push({ sourceDocumentType: "invoice", sourceDocumentId: row.id, documentNumber: row.invoiceNumber, entryDate: row.invoicedAt.toISOString() });
+      if (dryRun) continue;
+      await postInvoiceIssueJournalEntry(
+        tx,
+        req.auth!.companyId,
+        row.branchId,
+        row.invoicedAt,
+        row.id,
+        row.invoiceNumber,
+        fils(row.subtotalFils),
+        fils(row.taxFils),
+        fils(row.totalFils),
+      );
+      await audit("invoice", row.id, row.branchId);
+    }
+
+    // Credit/debit notes: posted at clearance (see loadCustomerLedgerLines's
+    // same createdAt-as-effective-date-proxy caveat).
+    for (const [table, documentType] of [
+      [creditNote, "credit_note"],
+      [debitNote, "debit_note"],
+    ] as const) {
+      const rows = await tx.select().from(table).where(and(isNull(table.voidedAt), eq(table.clearanceStatus, "cleared")));
+      for (const row of rows) {
+        if (await alreadyHasEntry(documentType, row.id)) {
+          alreadyPosted += 1;
+          continue;
+        }
+        posted.push({ sourceDocumentType: documentType, sourceDocumentId: row.id, documentNumber: row.noteNumber, entryDate: row.createdAt.toISOString() });
+        if (dryRun) continue;
+        await postNoteClearanceJournalEntry(
+          tx,
+          req.auth!.companyId,
+          row.branchId,
+          row.createdAt,
+          documentType,
+          row.id,
+          row.noteNumber,
+          fils(row.amountFils),
+          fils(row.taxFils),
+          fils(row.totalFils),
+        );
+        await audit(documentType, row.id, row.branchId);
+      }
+    }
+
+    // Collections: the allocation (and its GL mirror) applies immediately at creation.
+    const collectionRows = await tx.select().from(collection).where(isNull(collection.voidedAt));
+    for (const row of collectionRows) {
+      if (await alreadyHasEntry("collection", row.id)) {
+        alreadyPosted += 1;
+        continue;
+      }
+      posted.push({ sourceDocumentType: "collection", sourceDocumentId: row.id, documentNumber: row.receiptNumber, entryDate: row.receivedAt.toISOString() });
+      if (dryRun) continue;
+      await postCollectionJournalEntry(tx, req.auth!.companyId, row.branchId, row.receivedAt, row.id, row.receiptNumber, row.method, fils(row.amountFils));
+      await audit("collection", row.id, row.branchId);
+    }
+
+    // Post-dated cheques: "clear" reclassifies PDC-in-Hand -> Cash; "bounce"/"cancel" reverse it back to AR.
+    const pdcRows = await tx
+      .select()
+      .from(postDatedCheque)
+      .where(and(isNull(postDatedCheque.voidedAt), inArray(postDatedCheque.status, ["cleared", "bounced", "cancelled"])));
+    for (const row of pdcRows) {
+      const sourceDocumentType = row.status === "cleared" ? "post_dated_cheque_clear" : "post_dated_cheque_reversal";
+      if (await alreadyHasEntry(sourceDocumentType, row.id)) {
+        alreadyPosted += 1;
+        continue;
+      }
+      const [collectionRow] = await tx.select().from(collection).where(eq(collection.id, row.collectionId));
+      if (!collectionRow) continue; // orphaned reference — nothing sensible to post; surfaced via audit elsewhere, not silently guessed at here.
+      const amountFils = fils(collectionRow.amountFils);
+      const entryDate = row.status === "cleared" ? row.clearedAt ?? row.updatedAt : row.bouncedAt ?? row.updatedAt;
+      posted.push({ sourceDocumentType, sourceDocumentId: row.id, documentNumber: row.chequeNumber, entryDate: entryDate.toISOString() });
+      if (dryRun) continue;
+      if (row.status === "cleared") {
+        await postPdcClearJournalEntry(tx, req.auth!.companyId, row.branchId, entryDate, row.id, row.chequeNumber, amountFils);
+      } else {
+        await postPdcReversalJournalEntry(tx, req.auth!.companyId, row.branchId, entryDate, row.id, row.chequeNumber, amountFils);
+      }
+      await audit(sourceDocumentType, row.id, row.branchId);
+    }
+
+    return { posted, alreadyPosted };
+  });
+
+  res.status(200).json({ dryRun, posted: result.posted, alreadyPosted: result.alreadyPosted } satisfies ReconcileReceivablesGlPostingsResponse);
+});
+
+type StatementLine = {
+  date: Date;
+  type: "invoice" | "collection" | "credit_note" | "debit_note";
+  documentNumber: string;
+  debitFils: Fils;
+  creditFils: Fils;
+};
+
+/**
+ * Every event that moves this customer's balance, each dated by its own
+ * effective date — not `createdAt`/`invoicedAt` indiscriminately — so a
+ * later payment or a credit/debit note applied against an older invoice
+ * still lands on the day it actually happened. Used by both the
+ * customer-statement (full detail, a `from`/`to` window) and the aging
+ * report (bucketed as of one instant, Invariant: `asOf` with no window).
+ *
+ * Effective date caveat, flagged for finance sign-off rather than
+ * guessed: invoices and credit/debit notes have no dedicated "issued
+ * at"/"cleared at" timestamp distinct from `invoicedAt`/`createdAt`
+ * (creation time) — those are used as the effective date proxy. In
+ * practice clearance+issue happens immediately after creation, so the
+ * gap is usually negligible, but a company with a material gap between
+ * creating and issuing a document should confirm this is acceptable
+ * before relying on these reports for period-close.
+ */
+async function loadCustomerLedgerLines(tx: Tx, customerId: string): Promise<StatementLine[]> {
+  const invoiceRows = await tx
+    .select()
+    .from(invoice)
+    .where(and(eq(invoice.customerId, customerId), isNull(invoice.voidedAt), inArray(invoice.status, ["issued", "partially_paid", "paid"])));
+  const invoiceIds = invoiceRows.map((i) => i.id);
+
+  // Sequential, not Promise.all — a single `pg` client (this shared
+  // transaction) can't run concurrent queries; see PLAN.md Phase 6's own
+  // note on this exact anti-pattern.
+  const creditNoteRows =
+    invoiceIds.length === 0
+      ? []
+      : await tx.select().from(creditNote).where(and(inArray(creditNote.invoiceId, invoiceIds), isNull(creditNote.voidedAt), eq(creditNote.clearanceStatus, "cleared")));
+  const debitNoteRows =
+    invoiceIds.length === 0
+      ? []
+      : await tx.select().from(debitNote).where(and(inArray(debitNote.invoiceId, invoiceIds), isNull(debitNote.voidedAt), eq(debitNote.clearanceStatus, "cleared")));
+  const collectionRows =
+    invoiceIds.length === 0
+      ? []
+      : await tx
+          .select({
+            amountFils: collectionAllocation.amountFils,
+            receivedAt: collection.receivedAt,
+            receiptNumber: collection.receiptNumber,
+          })
+          .from(collectionAllocation)
+          .innerJoin(collection, eq(collection.id, collectionAllocation.collectionId))
+          .where(and(inArray(collectionAllocation.invoiceId, invoiceIds), isNull(collectionAllocation.voidedAt)));
+
+  return [
+    ...invoiceRows.map((i): StatementLine => ({ date: i.invoicedAt, type: "invoice", documentNumber: i.invoiceNumber, debitFils: fils(i.totalFils), creditFils: ZERO_FILS })),
+    ...creditNoteRows.map((c): StatementLine => ({ date: c.createdAt, type: "credit_note", documentNumber: c.noteNumber, debitFils: ZERO_FILS, creditFils: fils(c.totalFils) })),
+    ...debitNoteRows.map((d): StatementLine => ({ date: d.createdAt, type: "debit_note", documentNumber: d.noteNumber, debitFils: fils(d.totalFils), creditFils: ZERO_FILS })),
+    ...collectionRows.map((c): StatementLine => ({ date: c.receivedAt, type: "collection", documentNumber: c.receiptNumber, debitFils: ZERO_FILS, creditFils: fils(c.amountFils) })),
+  ].sort((a, b) => a.date.getTime() - b.date.getTime());
+}
 
 receivablesRouter.get("/reports/customer-statement", requireAuth, requirePermission(REPORTS_MODULE, "view"), async (req, res) => {
   const customerId = queryString(req, "customerId");
@@ -471,54 +763,27 @@ receivablesRouter.get("/reports/customer-statement", requireAuth, requirePermiss
     res.status(400).json(validationError({ customerId: "customerId is required" }));
     return;
   }
-  const from = queryString(req, "from");
-  const to = queryString(req, "to");
+  const from = queryString(req, "from") ? new Date(queryString(req, "from")!) : null;
+  const to = queryString(req, "to") ? new Date(queryString(req, "to")!) : null;
 
   const result = await withTenant(db, req.auth!.companyId, async (tx) => {
     const [custRow] = await tx.select().from(customer).where(eq(customer.id, customerId));
     if (!custRow) return null;
 
-    const invoiceWhere = and(
-      eq(invoice.customerId, customerId),
-      isNull(invoice.voidedAt),
-      inArray(invoice.status, ["issued", "partially_paid", "paid"]),
-      from ? gte(invoice.invoicedAt, new Date(from)) : undefined,
-      to ? lte(invoice.invoicedAt, new Date(to)) : undefined,
-    );
-    const invoiceRows = await tx.select().from(invoice).where(invoiceWhere);
+    const allLines = await loadCustomerLedgerLines(tx, customerId);
 
-    const invoiceIds = invoiceRows.map((i) => i.id);
-    const collectionRows =
-      invoiceIds.length === 0
-        ? []
-        : await tx
-            .select({
-              collectionId: collectionAllocation.collectionId,
-              amountFils: collectionAllocation.amountFils,
-              receivedAt: collection.receivedAt,
-              receiptNumber: collection.receiptNumber,
-            })
-            .from(collectionAllocation)
-            .innerJoin(collection, eq(collection.id, collectionAllocation.collectionId))
-            .where(
-              and(
-                inArray(collectionAllocation.invoiceId, invoiceIds),
-                isNull(collectionAllocation.voidedAt),
-                from ? gte(collection.receivedAt, new Date(from)) : undefined,
-                to ? lte(collection.receivedAt, new Date(to)) : undefined,
-              ),
-            );
+    // Opening balance: the net effect of everything strictly before the
+    // window, not zero — a statement for March has to start from where
+    // February left off, not from a fresh zero that discards all of this
+    // customer's earlier history (the bug this replaces: `from` silently
+    // dropped everything before it with no opening-balance line to show
+    // for it, understating the running balance for the entire window).
+    const beforeWindow = from ? allLines.filter((l) => l.date < from) : [];
+    const inWindow = allLines.filter((l) => (!from || l.date >= from) && (!to || l.date <= to));
+    const openingBalanceFils = beforeWindow.reduce((acc, l) => addFils(acc, l.debitFils, subFils(ZERO_FILS, l.creditFils)), ZERO_FILS);
 
-    type Line = { date: Date; type: "invoice" | "collection"; documentNumber: string; debitFils: Fils; creditFils: Fils };
-    const lines: Line[] = [
-      ...invoiceRows.map((i): Line => ({ date: i.invoicedAt, type: "invoice", documentNumber: i.invoiceNumber, debitFils: fils(i.totalFils), creditFils: ZERO_FILS })),
-      ...collectionRows.map((c): Line => ({ date: c.receivedAt, type: "collection", documentNumber: c.receiptNumber, debitFils: ZERO_FILS, creditFils: fils(c.amountFils) })),
-    ].sort((a, b) => a.date.getTime() - b.date.getTime());
-
-    let running = ZERO_FILS;
-    const openingBalanceFils = ZERO_FILS; // No pre-Phase-8 receivables history to open a balance from.
-    running = openingBalanceFils;
-    const apiLines = lines.map((l) => {
+    let running = openingBalanceFils;
+    const apiLines = inWindow.map((l) => {
       running = addFils(running, l.debitFils, subFils(ZERO_FILS, l.creditFils));
       return {
         date: l.date.toISOString(),
@@ -553,28 +818,73 @@ receivablesRouter.get("/reports/aging", requireAuth, requirePermission(REPORTS_M
   const format = queryString(req, "format");
 
   const body = await withTenant(db, req.auth!.companyId, async (tx) => {
-    const openInvoices = await tx
+    // Every invoice that had reached "issued" by `asOf` — not filtered to
+    // the invoice's *current* status (issued/partially_paid), which was
+    // this report's actual bug: an invoice fully paid by today but still
+    // outstanding as of a historical `asOf` was silently excluded, and
+    // conversely an invoice issued *after* `asOf` was silently included
+    // because nothing checked `invoicedAt` against `asOf` at all.
+    const candidateInvoices = await tx
       .select()
       .from(invoice)
-      .where(and(inArray(invoice.status, ["issued", "partially_paid"]), isNull(invoice.voidedAt)));
-    if (openInvoices.length === 0) return { asOf: asOf.toISOString(), items: [], grandTotalJod: filsToJodString(ZERO_FILS) };
+      .where(and(inArray(invoice.status, ["issued", "partially_paid", "paid"]), isNull(invoice.voidedAt), lte(invoice.invoicedAt, asOf)));
+    if (candidateInvoices.length === 0) return { asOf: asOf.toISOString(), items: [], grandTotalJod: filsToJodString(ZERO_FILS) };
 
-    const invoiceIds = openInvoices.map((i) => i.id);
+    const invoiceIds = candidateInvoices.map((i) => i.id);
+    // Sequential, not Promise.all — a single `pg` client (this shared
+    // transaction) can't run concurrent queries; see PLAN.md Phase 6's own
+    // note on this exact anti-pattern.
+    //
+    // Each effective-dated on its own event's date, and must have still
+    // been active as of `asOf` — a PDC bounced/cancelled after asOf still
+    // counted as reducing the balance at that instant; one bounced/voided
+    // before asOf never did, regardless of today's state.
     const allocations = await tx
       .select({ invoiceId: collectionAllocation.invoiceId, amountFils: collectionAllocation.amountFils })
       .from(collectionAllocation)
-      .where(and(inArray(collectionAllocation.invoiceId, invoiceIds), isNull(collectionAllocation.voidedAt)));
-    const allocatedByInvoice = new Map<string, bigint>();
-    for (const a of allocations) allocatedByInvoice.set(a.invoiceId, (allocatedByInvoice.get(a.invoiceId) ?? 0n) + a.amountFils);
+      .innerJoin(collection, eq(collection.id, collectionAllocation.collectionId))
+      .where(
+        and(
+          inArray(collectionAllocation.invoiceId, invoiceIds),
+          lte(collection.receivedAt, asOf),
+          or(isNull(collectionAllocation.voidedAt), sql`${collectionAllocation.voidedAt} > ${asOf}`),
+        ),
+      );
+    const creditNoteRows = await tx
+      .select({ invoiceId: creditNote.invoiceId, totalFils: creditNote.totalFils })
+      .from(creditNote)
+      .where(
+        and(
+          inArray(creditNote.invoiceId, invoiceIds),
+          eq(creditNote.clearanceStatus, "cleared"),
+          lte(creditNote.createdAt, asOf),
+          or(isNull(creditNote.voidedAt), sql`${creditNote.voidedAt} > ${asOf}`),
+        ),
+      );
+    const debitNoteRows = await tx
+      .select({ invoiceId: debitNote.invoiceId, totalFils: debitNote.totalFils })
+      .from(debitNote)
+      .where(
+        and(
+          inArray(debitNote.invoiceId, invoiceIds),
+          eq(debitNote.clearanceStatus, "cleared"),
+          lte(debitNote.createdAt, asOf),
+          or(isNull(debitNote.voidedAt), sql`${debitNote.voidedAt} > ${asOf}`),
+        ),
+      );
+    const netReductionByInvoice = new Map<string, bigint>();
+    for (const a of allocations) netReductionByInvoice.set(a.invoiceId, (netReductionByInvoice.get(a.invoiceId) ?? 0n) + a.amountFils);
+    for (const c of creditNoteRows) netReductionByInvoice.set(c.invoiceId, (netReductionByInvoice.get(c.invoiceId) ?? 0n) + c.totalFils);
+    for (const d of debitNoteRows) netReductionByInvoice.set(d.invoiceId, (netReductionByInvoice.get(d.invoiceId) ?? 0n) - d.totalFils);
 
-    const customerIds = [...new Set(openInvoices.map((i) => i.customerId))];
+    const customerIds = [...new Set(candidateInvoices.map((i) => i.customerId))];
     const customerRows = await tx.select().from(customer).where(inArray(customer.id, customerIds));
     const customerById = new Map(customerRows.map((c) => [c.id, c.name]));
 
     // Standard AR aging buckets: current (not yet due), 1-30/31-60/61-90/90+ days past due.
     const buckets = new Map<string, { currentFils: Fils; days30Fils: Fils; days60Fils: Fils; days90PlusFils: Fils }>();
-    for (const inv of openInvoices) {
-      const outstanding = subFils(fils(inv.totalFils), fils(allocatedByInvoice.get(inv.id) ?? 0n));
+    for (const inv of candidateInvoices) {
+      const outstanding = subFils(fils(inv.totalFils), fils(netReductionByInvoice.get(inv.id) ?? 0n));
       if (outstanding <= ZERO_FILS) continue;
       const dueDate = inv.dueDate ?? inv.invoicedAt;
       const daysPastDue = Math.floor((asOf.getTime() - dueDate.getTime()) / AGING_DAY_MS);

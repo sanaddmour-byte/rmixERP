@@ -4,22 +4,25 @@ import { Stack, useFocusEffect } from "expo-router";
 import { Button } from "../../src/components/Button";
 import { useRequireAuth } from "../../src/lib/useRequireAuth";
 import { discardItem, listQueue, retryAllPending, retryItem, type SyncQueueItem } from "../../src/lib/syncQueue";
+import { useIsSyncing } from "../../src/lib/useIsSyncing";
 import { colors } from "../../src/theme";
 
+/** The four states the review asked for, reflecting actual state: "Synced" never appears here since a synced item leaves the queue entirely (see the delivery screen for that one). */
 const STATUS_LABEL: Record<SyncQueueItem["status"], string> = {
-  pending: "Waiting to sync",
-  failed: "Sync failed — will retry",
-  conflict: "Needs review",
+  pending: "Saved offline",
+  failed: "Needs attention",
+  conflict: "Needs attention",
 };
 
 const STATUS_COLOR: Record<SyncQueueItem["status"], string> = {
   pending: colors.textMuted,
-  failed: colors.accent,
+  failed: colors.danger,
   conflict: colors.danger,
 };
 
 function QueueRow({ item, onChanged }: { item: SyncQueueItem; onChanged: () => void }) {
   const [busy, setBusy] = React.useState(false);
+  const syncing = useIsSyncing(item.id);
 
   async function handleRetry() {
     setBusy(true);
@@ -45,13 +48,15 @@ function QueueRow({ item, onChanged }: { item: SyncQueueItem; onChanged: () => v
       }}
     >
       <Text style={{ fontWeight: "600", color: colors.navy }}>Proof of Delivery — {item.payload.deliveryOrderId}</Text>
-      <Text style={{ color: STATUS_COLOR[item.status], fontSize: 13 }}>{STATUS_LABEL[item.status]}</Text>
+      <Text style={{ color: syncing ? colors.navy : STATUS_COLOR[item.status], fontSize: 13 }}>
+        {syncing ? "Syncing…" : STATUS_LABEL[item.status]}
+      </Text>
       <Text style={{ color: colors.textMuted, fontSize: 12 }}>
         Queued {new Date(item.createdAt).toLocaleString()} · {item.attempts} attempt{item.attempts === 1 ? "" : "s"}
       </Text>
       {item.lastError && <Text style={{ color: colors.textMuted, fontSize: 12 }}>{item.lastError}</Text>}
       <View style={{ flexDirection: "row", gap: 8 }}>
-        <Button label={busy ? "…" : "Retry now"} variant="outline" onPress={() => void handleRetry()} disabled={busy} />
+        <Button label={busy || syncing ? "…" : "Retry now"} variant="outline" onPress={() => void handleRetry()} disabled={busy || syncing} />
         {item.status === "conflict" && <Button label="Discard" variant="outline" onPress={() => void handleDiscard()} />}
       </View>
     </View>

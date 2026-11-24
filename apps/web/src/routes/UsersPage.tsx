@@ -65,7 +65,7 @@ export function UsersPage() {
       onSearch={setQ}
       createFields={createFields}
       onCreate={(values: FormValues) =>
-        create.mutate({
+        create.mutateAsync({
           data: {
             email: String(values.email ?? ""),
             displayName: String(values.displayName ?? ""),
@@ -78,7 +78,7 @@ export function UsersPage() {
       creating={create.isPending}
       editFields={editFields}
       onUpdate={(id, values: FormValues) =>
-        update.mutate({
+        update.mutateAsync({
           id,
           data: {
             displayName: String(values.displayName ?? ""),

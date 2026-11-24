@@ -4,6 +4,8 @@
  * it only through `fils()`/`toFils()` and read it only through the
  * functions in this file.
  */
+import { InputParseError } from "./errors";
+
 export type Fils = bigint & { readonly __brand: "Fils" };
 
 const FILS_PER_JOD = 1000n;
@@ -19,7 +21,7 @@ export function jodStringToFils(input: string): Fils {
   const trimmed = input.trim();
   const match = /^(-?)(\d+)(?:\.(\d{1,3}))?$/.exec(trimmed);
   if (!match) {
-    throw new Error(`Invalid JOD amount: "${input}"`);
+    throw new InputParseError(`Invalid JOD amount: "${input}" — expected a decimal number with up to 3 decimal places, e.g. "1234.567".`);
   }
   const [, sign = "", whole = "0", fraction = ""] = match;
   const paddedFraction = fraction.padEnd(3, "0");

@@ -19,7 +19,11 @@ export interface JoFotaraConfig {
   baseUrl: string;
   clientId: string;
   clientSecret: string;
+  /** Request timeout in ms — defaults to 30s. A hung connection must fail into the bounded-retry path (CLAUDE.md), never hang the submitting request indefinitely. */
+  timeoutMs?: number;
 }
+
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 export class JoFotaraProvider implements ClearanceProvider {
   constructor(private readonly config: JoFotaraConfig) {}
@@ -32,6 +36,8 @@ export class JoFotaraProvider implements ClearanceProvider {
     // payload — "invoice" is a placeholder key, not a confirmed field name.
     const body = JSON.stringify({ invoice: Buffer.from(input.ublXml, "utf8").toString("base64") });
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS);
     let response: Response;
     try {
       response = await fetch(url, {
@@ -46,9 +52,16 @@ export class JoFotaraProvider implements ClearanceProvider {
           "Secret-Key": this.config.clientSecret,
         },
         body,
+        signal: controller.signal,
       });
     } catch (err: unknown) {
+      // A timeout abort lands here too (AbortError) — genuinely
+      // indistinguishable from "never got a response" from our side, so
+      // it is treated the same as any other transport failure: eligible
+      // for the bounded exponential-backoff retry, never silently hung.
       return { kind: "transport_error", reason: err instanceof Error ? err.message : "network error" };
+    } finally {
+      clearTimeout(timeout);
     }
 
     if (response.status >= 500 || response.status === 408 || response.status === 429) {

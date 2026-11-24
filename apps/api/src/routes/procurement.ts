@@ -342,12 +342,33 @@ function poToApi(row: PurchaseOrderRow): PurchaseOrder {
   };
 }
 
-async function poLineToApi(tx: Tx, row: PurchaseOrderLineRow) {
-  const receivedRows = await tx
-    .select({ qty: goodsReceiptLine.quantityReceived })
+/** Sum of goods-receipt lines against each given PO line — ordered vs. accepted, tracked per line on demand (DOMAIN.md/PLAN.md), never as extra order-level states. */
+async function loadReceivedMilliByLine(tx: Tx, purchaseOrderLineIds: string[]): Promise<Map<string, bigint>> {
+  if (purchaseOrderLineIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ poLineId: goodsReceiptLine.purchaseOrderLineId, qty: goodsReceiptLine.quantityReceived })
     .from(goodsReceiptLine)
-    .where(eq(goodsReceiptLine.purchaseOrderLineId, row.id));
-  const receivedMilli = receivedRows.reduce((sum, r) => sum + decimalStringToMilliUnits(r.qty), 0n);
+    .where(inArray(goodsReceiptLine.purchaseOrderLineId, purchaseOrderLineIds));
+  const map = new Map<string, bigint>();
+  for (const r of rows) map.set(r.poLineId, (map.get(r.poLineId) ?? 0n) + decimalStringToMilliUnits(r.qty));
+  return map;
+}
+
+/** Sum of non-voided vendor-bill lines against each line of one PO — the "already billed" side of the accepted-unbilled cap. */
+async function loadBilledMilliByLine(tx: Tx, purchaseOrderId: string): Promise<Map<string, bigint>> {
+  const rows = await tx
+    .select({ poLineId: vendorBillLine.purchaseOrderLineId, qty: vendorBillLine.quantity })
+    .from(vendorBillLine)
+    .innerJoin(vendorBill, eq(vendorBillLine.vendorBillId, vendorBill.id))
+    .where(and(eq(vendorBill.purchaseOrderId, purchaseOrderId), isNull(vendorBill.voidedAt)));
+  const map = new Map<string, bigint>();
+  for (const r of rows) map.set(r.poLineId, (map.get(r.poLineId) ?? 0n) + decimalStringToMilliUnits(r.qty));
+  return map;
+}
+
+function poLineToApi(row: PurchaseOrderLineRow, receivedMilliByLine: Map<string, bigint>, billedMilliByLine: Map<string, bigint>) {
+  const receivedMilli = receivedMilliByLine.get(row.id) ?? 0n;
+  const billedMilli = billedMilliByLine.get(row.id) ?? 0n;
   const orderedMilli = decimalStringToMilliUnits(row.quantity);
   return {
     id: row.id,
@@ -361,6 +382,11 @@ async function poLineToApi(tx: Tx, row: PurchaseOrderLineRow) {
     totalJod: filsToJodString(fils(row.totalFils)),
     receivedQuantity: milliUnitsToDecimalString(receivedMilli),
     varianceQuantity: milliUnitsToDecimalString(receivedMilli - orderedMilli),
+    billedQuantity: milliUnitsToDecimalString(billedMilli),
+    // What a bill can still draw on — accepted but not yet billed, never
+    // ordered-but-not-yet-received (the review's actual bug: a bill for
+    // the full ordered amount was accepted after only part had arrived).
+    remainingBillableQuantity: milliUnitsToDecimalString(receivedMilli - billedMilli > 0n ? receivedMilli - billedMilli : 0n),
     createdAt: row.createdAt.toISOString(),
     voidedAt: row.voidedAt?.toISOString() ?? null,
   };
@@ -373,7 +399,9 @@ async function loadPurchaseOrderDetail(tx: Tx, id: string): Promise<PurchaseOrde
     .select()
     .from(purchaseOrderLine)
     .where(and(eq(purchaseOrderLine.purchaseOrderId, id), isNull(purchaseOrderLine.voidedAt)));
-  return { ...poToApi(row), lines: await Promise.all(lines.map((l) => poLineToApi(tx, l))) };
+  const receivedMilliByLine = await loadReceivedMilliByLine(tx, lines.map((l) => l.id));
+  const billedMilliByLine = await loadBilledMilliByLine(tx, id);
+  return { ...poToApi(row), lines: lines.map((l) => poLineToApi(l, receivedMilliByLine, billedMilliByLine)) };
 }
 
 async function recomputePurchaseOrderTotals(tx: Tx, purchaseOrderId: string): Promise<void> {
@@ -645,7 +673,14 @@ procurementRouter.post("/goods-receipts", requireAuth, requirePermission(GR_MODU
   const input = parsed.data;
 
   const result = await withTenant(db, req.auth!.companyId, async (tx) => {
-    const [poRow] = await tx.select().from(purchaseOrder).where(and(eq(purchaseOrder.id, input.purchaseOrderId), isNull(purchaseOrder.voidedAt)));
+    // Same lock as the vendor-bill route takes on this row — a receipt
+    // and a bill against the same PO must never interleave their reads
+    // of each other's quantities.
+    const [poRow] = await tx
+      .select()
+      .from(purchaseOrder)
+      .where(and(eq(purchaseOrder.id, input.purchaseOrderId), isNull(purchaseOrder.voidedAt)))
+      .for("update");
     if (!poRow) return { kind: "not_found" as const };
     if (poRow.status !== "approved" && poRow.status !== "received") return { kind: "invalid_status" as const };
 
@@ -833,7 +868,16 @@ procurementRouter.post("/vendor-bills", requireAuth, requirePermission(BILL_MODU
   const input = parsed.data;
 
   const result = await withTenant(db, req.auth!.companyId, async (tx) => {
-    const [poRow] = await tx.select().from(purchaseOrder).where(and(eq(purchaseOrder.id, input.purchaseOrderId), isNull(purchaseOrder.voidedAt)));
+    // Locked for the rest of this transaction — serializes concurrent
+    // bills (and the goods-receipt route's own lock on the same row)
+    // against this PO, so two simultaneous bill requests can never both
+    // read the same "already billed" snapshot and together bill past
+    // what was actually accepted.
+    const [poRow] = await tx
+      .select()
+      .from(purchaseOrder)
+      .where(and(eq(purchaseOrder.id, input.purchaseOrderId), isNull(purchaseOrder.voidedAt)))
+      .for("update");
     if (!poRow) return { kind: "not_found" as const };
     if (poRow.status !== "received" && poRow.status !== "billed") return { kind: "invalid_status" as const };
 
@@ -843,15 +887,12 @@ procurementRouter.post("/vendor-bills", requireAuth, requirePermission(BILL_MODU
       .where(and(eq(purchaseOrderLine.purchaseOrderId, input.purchaseOrderId), isNull(purchaseOrderLine.voidedAt)));
     const poLineById = new Map(poLines.map((l) => [l.id, l]));
 
-    const existingBillLines = await tx
-      .select({ poLineId: vendorBillLine.purchaseOrderLineId, quantity: vendorBillLine.quantity })
-      .from(vendorBillLine)
-      .innerJoin(vendorBill, eq(vendorBillLine.vendorBillId, vendorBill.id))
-      .where(and(eq(vendorBill.purchaseOrderId, input.purchaseOrderId), isNull(vendorBill.voidedAt)));
-    const alreadyBilledMilliByLine = new Map<string, bigint>();
-    for (const r of existingBillLines) {
-      alreadyBilledMilliByLine.set(r.poLineId, (alreadyBilledMilliByLine.get(r.poLineId) ?? 0n) + decimalStringToMilliUnits(r.quantity));
-    }
+    const receivedMilliByLine = await loadReceivedMilliByLine(tx, poLines.map((l) => l.id));
+    const alreadyBilledMilliByLine = await loadBilledMilliByLine(tx, input.purchaseOrderId);
+    // Mutated as lines are prepared below, then used again after the loop
+    // to decide whether this bill closes out the PO (every line fully
+    // received AND fully billed) — not a second, out-of-sync query.
+    const newBilledMilliByLine = new Map(alreadyBilledMilliByLine);
 
     const preparedLines: { poLine: PurchaseOrderLineRow; description: string; quantity: string; netFils: Fils; taxFils: Fils; totalFils: Fils }[] = [];
     for (const line of input.lines) {
@@ -859,15 +900,44 @@ procurementRouter.post("/vendor-bills", requireAuth, requirePermission(BILL_MODU
       if (!poLine) return { kind: "invalid_line" as const, message: `Line ${line.purchaseOrderLineId} does not belong to this purchase order.` };
       const qtyMilli = decimalStringToMilliUnits(line.quantity);
       if (qtyMilli <= 0n) return { kind: "invalid_line" as const, message: "quantity must be positive." };
-      const orderedMilli = decimalStringToMilliUnits(poLine.quantity);
-      const alreadyBilledMilli = alreadyBilledMilliByLine.get(poLine.id) ?? 0n;
-      if (alreadyBilledMilli + qtyMilli > orderedMilli) {
-        return { kind: "invalid_line" as const, message: `Line ${line.purchaseOrderLineId} would bill more than remains unbilled on the PO line.` };
+      // Capped against what was actually *received* (accepted), not what
+      // was merely ordered — DOMAIN.md's ordered/accepted/billed
+      // distinction. Billing against the ordered quantity before
+      // everything arrives is the review's reported bug: a bill for the
+      // full order was accepted after only part had been received.
+      //
+      // Read from the running total (`newBilledMilliByLine`), not the
+      // pre-request snapshot — the same PO line can legitimately repeat
+      // across this request's own `lines` (e.g. two descriptions against
+      // one line), and each repeat must count against what the earlier
+      // ones in this same request already claimed, not just what was
+      // already billed before this request started.
+      const receivedMilli = receivedMilliByLine.get(poLine.id) ?? 0n;
+      const alreadyBilledMilli = newBilledMilliByLine.get(poLine.id) ?? 0n;
+      if (alreadyBilledMilli + qtyMilli > receivedMilli) {
+        return {
+          kind: "invalid_line" as const,
+          message: `Line ${line.purchaseOrderLineId} would bill more than has been received and not yet billed (received ${milliUnitsToDecimalString(receivedMilli)}, already billed ${milliUnitsToDecimalString(alreadyBilledMilli)}).`,
+        };
       }
+      newBilledMilliByLine.set(poLine.id, alreadyBilledMilli + qtyMilli);
       const netFils = mulFilsRoundHalfUp(fils(poLine.unitPriceFils), qtyMilli, 1000n);
       const taxFils = taxForLine(netFils, BigInt(poLine.taxRateBasisPoints));
       preparedLines.push({ poLine, description: line.description, quantity: line.quantity, netFils, taxFils, totalFils: addFils(netFils, taxFils) });
     }
+
+    // The PO only closes out once *every* line is both fully received
+    // (nothing more ever expected) and fully billed by this request —
+    // not on the first bill regardless of how partial it is (the
+    // review's other reported bug: one partial bill moved the whole PO
+    // to "billed", a terminal status, which then blocked the remaining
+    // goods receipt).
+    const isFullyReceivedAndBilled = poLines.every((l) => {
+      const orderedMilli = decimalStringToMilliUnits(l.quantity);
+      const receivedMilli = receivedMilliByLine.get(l.id) ?? 0n;
+      const billedMilli = newBilledMilliByLine.get(l.id) ?? 0n;
+      return receivedMilli >= orderedMilli && billedMilli >= receivedMilli;
+    });
 
     const [branchRow] = await tx.select().from(branch).where(eq(branch.id, poRow.branchId));
     if (!branchRow) throw new Error("purchase order branch missing");
@@ -908,7 +978,7 @@ procurementRouter.post("/vendor-bills", requireAuth, requirePermission(BILL_MODU
       });
     }
 
-    if (poRow.status === "received") {
+    if (poRow.status === "received" && isFullyReceivedAndBilled) {
       assertPurchaseOrderTransition(poRow.status, "billed");
       await tx.update(purchaseOrder).set({ status: "billed", updatedAt: new Date() }).where(eq(purchaseOrder.id, poRow.id));
     }

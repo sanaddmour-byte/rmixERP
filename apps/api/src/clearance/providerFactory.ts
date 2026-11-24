@@ -9,6 +9,11 @@ import { JoFotaraProvider } from "./jofotara/provider";
  * account, and makes going live with real clearance an explicit config
  * change, not an accidental one.
  */
+/** Single source of truth for whether the active provider is the real JoFotaraProvider — same condition `createClearanceProvider` itself switches on, reused by the `/clearance-provider-info` route so the UI can show a persistent "simulated" banner. */
+export function isClearanceSimulated(): boolean {
+  return process.env.CLEARANCE_PROVIDER !== "jofotara";
+}
+
 export function createClearanceProvider(): ClearanceProvider {
   if (process.env.CLEARANCE_PROVIDER === "jofotara") {
     const baseUrl = process.env.JOFOTARA_BASE_URL;

@@ -41,10 +41,10 @@ export function BranchesPage() {
       onSearch={setQ}
       csvUrl={`/api/branches?format=csv${q ? `&q=${encodeURIComponent(q)}` : ""}`}
       createFields={FIELDS}
-      onCreate={(values) => create.mutate({ data: toRequestBody(values) })}
+      onCreate={(values) => create.mutateAsync({ data: toRequestBody(values) })}
       creating={create.isPending}
       editFields={FIELDS}
-      onUpdate={(id, values) => update.mutate({ id, data: toRequestBody(values) })}
+      onUpdate={(id, values) => update.mutateAsync({ id, data: toRequestBody(values) })}
       updating={update.isPending}
       onVoid={(id) => voidMutation.mutate({ id, data: {} })}
       voiding={voidMutation.isPending}

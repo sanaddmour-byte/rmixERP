@@ -1,6 +1,8 @@
 import * as React from "react";
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from "@rmixerp/ui";
 import { useLanguage } from "../i18n/LanguageContext";
+import { downloadCsv } from "../lib/downloadCsv";
+import { throwIfApiError } from "../lib/apiResult";
 
 export interface Column<T> {
   key: keyof T;
@@ -125,11 +127,11 @@ interface ResourceListPageProps<T extends { id: string }> {
   onSearch: (q: string) => void;
   csvUrl?: string;
   createFields: FieldConfig[];
-  onCreate: (values: FormValues) => void;
+  /** Returns the awaited mutation result (e.g. `create.mutateAsync(...)`) so the form can tell a genuine success apart from a documented non-2xx response and keep the user's draft on screen, with the real error, until it actually saves. */
+  onCreate: (values: FormValues) => Promise<unknown>;
   creating: boolean;
-  createError?: string | null;
   editFields?: FieldConfig[];
-  onUpdate?: (id: string, values: FormValues) => void;
+  onUpdate?: (id: string, values: FormValues) => Promise<unknown>;
   updating?: boolean;
   onVoid: (id: string) => void;
   voiding: boolean;
@@ -150,7 +152,6 @@ export function ResourceListPage<T extends { id: string }>({
   createFields,
   onCreate,
   creating,
-  createError,
   editFields,
   onUpdate,
   updating,
@@ -161,21 +162,61 @@ export function ResourceListPage<T extends { id: string }>({
   const { t } = useLanguage();
   const [showCreate, setShowCreate] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [createFormError, setCreateFormError] = React.useState<string | null>(null);
+  const [editFormError, setEditFormError] = React.useState<string | null>(null);
+  const [exporting, setExporting] = React.useState(false);
+  const [exportError, setExportError] = React.useState<string | null>(null);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const editingRow = items.find((i) => i.id === editingId);
+
+  async function handleExport() {
+    if (!csvUrl) return;
+    setExporting(true);
+    setExportError(null);
+    const result = await downloadCsv(csvUrl, `${title.toLowerCase().replace(/\s+/g, "-")}.csv`);
+    if (!result.ok) setExportError(result.error);
+    setExporting(false);
+  }
+
+  // Keeps the user's typed draft on screen, with the real server error,
+  // until the record actually saves — `onCreate`/`onUpdate` resolve
+  // successfully even for a documented 400/403/409 (the generated client
+  // never throws for those), so success has to be read from the awaited
+  // result's own status, not just "the promise didn't reject".
+  async function handleCreateSubmit(values: FormValues) {
+    setCreateFormError(null);
+    try {
+      const result = await onCreate(values);
+      throwIfApiError(result);
+      setShowCreate(false);
+    } catch (err) {
+      setCreateFormError(err instanceof Error ? err.message : t.resource.saveError);
+    }
+  }
+
+  async function handleEditSubmit(values: FormValues) {
+    if (!onUpdate || !editingRow) return;
+    setEditFormError(null);
+    try {
+      const result = await onUpdate(editingRow.id, values);
+      throwIfApiError(result);
+      setEditingId(null);
+    } catch (err) {
+      setEditFormError(err instanceof Error ? err.message : t.resource.saveError);
+    }
+  }
 
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>{title}</CardTitle>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {exportError && <span className="text-xs text-orange-700">{exportError}</span>}
           {csvUrl && (
-            <a href={csvUrl} download>
-              <Button variant="outline" size="sm">
-                {t.resource.exportCsv}
-              </Button>
-            </a>
+            <Button variant="outline" size="sm" disabled={exporting} onClick={() => void handleExport()}>
+              {exporting ? t.resource.exporting : t.resource.exportCsv}
+            </Button>
           )}
           {permissions.create && (
             <Button variant="accent" size="sm" onClick={() => setShowCreate(true)}>
@@ -195,13 +236,13 @@ export function ResourceListPage<T extends { id: string }>({
           <Card className="border-navy-300 dark:border-navy-600">
             <ResourceForm
               fields={createFields}
-              onSubmit={(values) => {
-                onCreate(values);
+              onSubmit={(values) => void handleCreateSubmit(values)}
+              onCancel={() => {
                 setShowCreate(false);
+                setCreateFormError(null);
               }}
-              onCancel={() => setShowCreate(false)}
               pending={creating}
-              error={createError}
+              error={createFormError}
               submitLabel={t.resource.create}
             />
           </Card>
@@ -222,12 +263,13 @@ export function ResourceListPage<T extends { id: string }>({
                 }
                 return acc;
               }, {})}
-              onSubmit={(values) => {
-                onUpdate(editingRow.id, values);
+              onSubmit={(values) => void handleEditSubmit(values)}
+              onCancel={() => {
                 setEditingId(null);
+                setEditFormError(null);
               }}
-              onCancel={() => setEditingId(null)}
               pending={Boolean(updating)}
+              error={editFormError}
               submitLabel={t.resource.save}
             />
           </Card>

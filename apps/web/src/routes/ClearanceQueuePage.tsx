@@ -1,5 +1,9 @@
 import * as React from "react";
 import {
+  useCorrectAndResubmitCreditNote,
+  useCorrectAndResubmitDebitNote,
+  useCorrectAndResubmitInvoice,
+  useGetClearanceProviderInfo,
   useListClearanceQueue,
   useSubmitCreditNoteForClearance,
   useSubmitDebitNoteForClearance,
@@ -47,6 +51,11 @@ export function ClearanceQueuePage() {
   const submitInvoice = useSubmitInvoiceForClearance(refetchOnSuccess(list));
   const submitCreditNote = useSubmitCreditNoteForClearance(refetchOnSuccess(list));
   const submitDebitNote = useSubmitDebitNoteForClearance(refetchOnSuccess(list));
+  const correctInvoice = useCorrectAndResubmitInvoice(refetchOnSuccess(list));
+  const correctCreditNote = useCorrectAndResubmitCreditNote(refetchOnSuccess(list));
+  const correctDebitNote = useCorrectAndResubmitDebitNote(refetchOnSuccess(list));
+  const providerInfo = useGetClearanceProviderInfo();
+  const simulated = providerInfo.data?.status === 200 && providerInfo.data.data.simulated;
 
   function retry(item: ClearanceQueueItem) {
     if (item.documentType === "invoice") submitInvoice.mutate({ id: item.id });
@@ -54,12 +63,25 @@ export function ClearanceQueuePage() {
     else submitDebitNote.mutate({ id: item.id });
   }
 
+  function correctAndResubmit(item: ClearanceQueueItem) {
+    if (item.documentType === "invoice") correctInvoice.mutate({ id: item.id });
+    else if (item.documentType === "credit_note") correctCreditNote.mutate({ id: item.id });
+    else correctDebitNote.mutate({ id: item.id });
+  }
+
   if (!permissions.view) return <p className="text-sm text-navy-400">You do not have access to the clearance queue.</p>;
 
   const retrying = submitInvoice.isPending || submitCreditNote.isPending || submitDebitNote.isPending;
+  const correcting = correctInvoice.isPending || correctCreditNote.isPending || correctDebitNote.isPending;
 
   return (
     <Card>
+      {simulated && (
+        <div className="mx-4 mt-4 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-yellow-800 dark:border-yellow-700 dark:bg-yellow-950 dark:text-yellow-200">
+          <strong>Simulated clearance.</strong> No document on this queue has been submitted to ISTD/JoFotara — a mock provider is
+          clearing everything locally. Configure <code>CLEARANCE_PROVIDER=jofotara</code> to go live.
+        </div>
+      )}
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle>Clearance Queue</CardTitle>
         <div className="flex gap-2">
@@ -140,6 +162,11 @@ export function ClearanceQueuePage() {
                   {permissions.create && (item.clearanceStatus === "pending" || item.clearanceStatus === "retrying") && (
                     <Button size="sm" variant="outline" disabled={retrying} onClick={() => retry(item)}>
                       {item.clearanceStatus === "retrying" ? "Retry now" : "Submit"}
+                    </Button>
+                  )}
+                  {permissions.create && item.clearanceStatus === "rejected" && (
+                    <Button size="sm" variant="outline" disabled={correcting} onClick={() => correctAndResubmit(item)}>
+                      Correct &amp; resubmit
                     </Button>
                   )}
                 </td>
